@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Configuration
-    const API_URL = 'http://10.23.25.2:8080/status';
+    const API_URL = 'http://localhost:8080/status';
     const REFRESH_INTERVAL = 5000; // in milliseconds
 
     // DOM Elements

@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 
 # --- Configuration ---
-DRAGONFLY_IP = "127.0.0.1"
+DRAGONFLY_IP = "10.23.24.7"
 DRAGONFLY_PORT = 8080
 HEARTBEAT_PORT = 9999
 SSH_PORT = 4663

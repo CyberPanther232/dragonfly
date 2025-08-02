@@ -7,7 +7,7 @@ import requests
 
 # --- Configuration ---
 # Match this with your Dragonfly server configuration
-SERVER_IP = "127.0.0.1"
+SERVER_IP = "10.23.24.7"
 SERVER_PORT = 8080
 HEARTBEAT_PORT = 9999
 
