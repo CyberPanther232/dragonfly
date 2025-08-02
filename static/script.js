@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateUI(data);
         } catch (error) {
             console.error('Failed to fetch agent status:', error);
-            agentContainer.innerHTML = `<p style="color: var(--status-offline);">Error: Could not connect to Dragonfly server at ${API_URL}.</p>`;
+            agentContainer.innerHTML = `<p style="color: var(--status-offline);">Error: Could not connect to Dragonfly server API.</p>`;
         }
     }
 
