@@ -4,12 +4,17 @@ import time
 import platform
 from threading import Thread
 import requests
+import watchdog
 
 # --- Configuration ---
 # Match this with your Dragonfly server configuration
 SERVER_IP = "10.23.24.7"
 SERVER_PORT = 8080
 HEARTBEAT_PORT = 9999
+HTTP = True
+SSH = True
+SSH_PORT = 22
+HTTP_PORT = 8080
 
 def get_device_info():
     """Gathers and returns information about the client device."""
@@ -37,6 +42,10 @@ def get_device_info():
             "ip": "127.0.0.1",
             "device_name": "unknown-host",
             "os": platform.system(),
+            "ssh_service" : SSH,
+            "ssh_port" : SSH_PORT,
+            "http_service": HTTP,
+            "http_port" : HTTP_PORT 
         }
 
 def run_heartbeat(server_ip, heartbeat_port):
@@ -66,11 +75,75 @@ def run_heartbeat(server_ip, heartbeat_port):
             
             time.sleep(15)
 
+def auth_alert():
+    
+    oper_sys = platform.system()
+    
+    if oper_sys.lower() == "linux":
+        os_auth_log = "/var/log/auth.log"
+
+def log_hawk():
+    log_files_to_monitor = [
+        "/var/log/syslog",
+        "/var/log/audit/audit.log",
+        "/var/log/messages",
+        "/var/log/auth.log",
+        "/var/log/secure",
+        "/var/log/kern.log",
+        "/var/log/dmesg",
+        "/var/log/cron",
+        "/var/log/maillog",
+        "/var/log/mail.log",
+        "/var/log/httpd/access_log",
+        "/var/log/httpd/error_log",
+        "/var/log/apache2/access.log",
+        "/var/log/apache2/error.log",
+        "/var/log/nginx/access.log",
+        "/var/log/nginx/error.log",
+    ]
+    existing_files = set(filter(os.path.exists, log_files))
+
+    while True:
+        try:
+            # Check each file in the original list
+            for log_file in log_files:
+                if log_file in existing_files:
+                    # If we were tracking it, check if it still exists
+                    if not os.path.exists(log_file):
+                        print(f"ALERT: Log file deleted: {log_file}")
+                        existing_files.remove(log_file)
+                else:
+                    # If we were not tracking it, check if it has been created
+                    if os.path.exists(log_file):
+                        print(f"INFO: New log file detected: {log_file}")
+                        existing_files.add(log_file)
+
+            # Wait for a bit before checking again to avoid high CPU usage
+            time.sleep(5)  # Check every 5 seconds
+
+        except KeyboardInterrupt:
+            print("\nMonitoring stopped by user.")
+            break
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            # Decide if you want to stop or continue on other errors
+            break
+
+    log_checker_thread = threading.Thread(
+        target=check_log_files,
+        args=(log_files_to_monitor,),
+        daemon=True
+    )
+
+    # Start the thread
+    log_checker_thread.start()
+
 def main():
     """Main function to register with the server and start services."""
     print("--- Nymph Agent Initializing ---")
     device_info = get_device_info()
     api_url = f"http://{SERVER_IP}:{SERVER_PORT}/nymph"
+    conf_url = f"http://{SERVER_IP}:{SERVER_PORT}/nymph-conf"
     
     # Loop until successfully registered with the server
     synced = False

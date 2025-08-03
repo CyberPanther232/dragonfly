@@ -10,8 +10,6 @@ from datetime import datetime
 DRAGONFLY_IP = "10.23.24.7"
 DRAGONFLY_PORT = 8080
 HEARTBEAT_PORT = 9999
-SSH_PORT = 4663
-HTTP_PORT = 8006
 
 # --- Global State ---
 nymph_agents = {}  # Key: (ip, device_name), Value: NymphAgent instance
@@ -20,7 +18,7 @@ logger = logging.getLogger('dragonfly')
 
 # --- Agent Class ---
 class NymphAgent:
-    def __init__(self, ip, device_name="nymph-1", os_name=None):
+    def __init__(self, ip, device_name="nymph-1", os_name=None, http=True, ssh=True, ssh_port=22, http_port=80):
         self.ip = ip
         self.device_name = device_name
         self.last_heartbeat = None
@@ -30,6 +28,10 @@ class NymphAgent:
             "ssh": "unknown",
             "heartbeat": "unknown"
         }
+        self.http = http
+        self.ssh = ssh
+        self.http_port = http_port
+        self.ssh_port = ssh_port
         self.status_lock = Lock()
         self.threads_started = False
 
@@ -54,7 +56,7 @@ class NymphAgent:
         def httpecho():
             while True:
                 try:
-                    echo = requests.get(f"http://{self.ip}:{HTTP_PORT}/", timeout=5)
+                    echo = requests.get(f"http://{self.ip}:{self.http_port}/", timeout=5)
                     with self.status_lock:
                         if echo.status_code == 200:
                             self.status["http"] = "online"
@@ -67,7 +69,7 @@ class NymphAgent:
                     # Log status regardless of outcome
                     with self.status_lock:
                         status_val = self.status["http"].upper()
-                        log_msg = f"HTTP:{status_val}:{self.ip}:{HTTP_PORT}:{datetime.now()}"
+                        log_msg = f"HTTP:{status_val}:{self.ip}:{self.http_port}:{datetime.now()}"
                         if status_val == "ONLINE":
                             logger.info(log_msg)
                         else:
@@ -77,7 +79,7 @@ class NymphAgent:
         def sshdetect():
             while True:
                 try:
-                    with socket.create_connection((self.ip, SSH_PORT), timeout=5):
+                    with socket.create_connection((self.ip, self.ssh_port), timeout=5):
                         with self.status_lock:
                             self.status["ssh"] = "online"
                 except (socket.timeout, ConnectionRefusedError, OSError):
@@ -93,8 +95,10 @@ class NymphAgent:
                             logger.error(log_msg)
                     time.sleep(10)
 
-        Thread(target=httpecho, daemon=True).start()
-        Thread(target=sshdetect, daemon=True).start()
+        if self.http:
+            Thread(target=httpecho, daemon=True).start()
+        if self.ssh:
+            Thread(target=sshdetect, daemon=True).start()
 
 # --- Centralized Heartbeat Listener ---
 def global_heartbeat_listener():
@@ -160,7 +164,14 @@ def main():
         with nymph_agents_lock:
             if key not in nymph_agents:
                 logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
-                nymph_agent = NymphAgent(data['ip'], data['device_name'], os_name=os_name)
+                nymph_agent = NymphAgent(
+                    data['ip'], data['device_name'], 
+                    os_name=os_name, 
+                    ssh=data['ssh_service'] if True and not None else False,
+                    ssh_port=data['ssh_port'] if not None and data['ssh_service'] else 22,
+                    http=data['http_service'] if True and not None else False,
+                    http_port=data['http_port'] if not None else 80
+                    )
                 nymph_agents[key] = nymph_agent
                 nymph_agent.start_detection_threads()
             else:
