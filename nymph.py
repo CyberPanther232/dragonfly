@@ -9,7 +9,7 @@ from collections import defaultdict, deque
 
 # --- Nymph Agent Configuration ---
 # Match this with your Dragonfly server configuration
-SERVER_IP = "localhost"  # Change to your server's IP if needed
+SERVER_IP = "10.23.24.7"  # Change to your server's IP if needed
 SERVER_PORT = 8080
 HEARTBEAT_PORT = 9999
 HTTP = True
@@ -46,6 +46,7 @@ else:
     LINUX_LOG_FILES = [
         '/var/log/auth.log',    # For Debian/Ubuntu
         '/var/log/secure'       # For RHEL/CentOS/Fedora
+        '/var/log/audit/audit.log'  # For systems using auditd
     ]
     # Keywords to find in Linux logs
     LINUX_KEYWORDS = {
@@ -54,7 +55,8 @@ else:
         'Failed password': 'FAILED_LOGIN',
         'authentication failure': 'AUTH_FAILURE',
         'session opened for user': 'SESSION_OPENED',
-        'invalid user': 'INVALID_USER'
+        'invalid user': 'INVALID_USER',
+        'sshd'
     }
 
 # --- Brute-Force Detection Global Variable ---
