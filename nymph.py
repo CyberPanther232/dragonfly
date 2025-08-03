@@ -5,7 +5,7 @@ import socket
 import platform
 import requests
 import threading
-from collections import defaultdict, deque
+from collections import defaultdict, deque, OrderedDict
 
 # --- Nymph Agent Configuration ---
 # Match this with your Dragonfly server configuration
@@ -23,7 +23,6 @@ BRUTE_FORCE_THRESHOLD = 5  # Number of failed attempts to trigger an alert
 BRUTE_FORCE_TIMEFRAME_SECONDS = 60  # Time window to detect brute force
 
 # --- Platform Specific Configuration ---
-# This block sets up the correct monitoring parameters based on the OS.
 if sys.platform == "win32":
     try:
         import win32evtlog
@@ -32,41 +31,33 @@ if sys.platform == "win32":
         sys.exit(1)
         
     LOG_TYPE = "Security"
-    # Event IDs for Windows
-    # 4624: Successful logon
-    # 4625: Failed logon
-    # 4740: Account lockout
     WINDOWS_EVENT_IDS = {
         4624: "SUCCESSFUL_LOGON",
         4625: "FAILED_LOGON",
         4740: "ACCOUNT_LOCKOUT"
     }
 else:
-    # Log files for Linux
     LINUX_LOG_FILES = [
         '/var/log/auth.log',    # For Debian/Ubuntu
         '/var/log/secure',       # For RHEL/CentOS/Fedora
         '/var/log/audit/audit.log'  # For systems using auditd
     ]
-    # Keywords to find in Linux logs
-    LINUX_KEYWORDS = {
-        'Accepted password': 'SUCCESSFUL_LOGIN',
-        'Accepted publickey': 'SUCCESSFUL_LOGIN_KEY',
-        'Failed password': 'FAILED_LOGIN',
-        'authentication failure': 'AUTH_FAILURE',
-        'session opened for user': 'SESSION_OPENED',
-        'invalid user': 'INVALID_USER',
-        'sshd login success secure': 'SSH_LOGIN_SUCCESS',
-        'sshd login failure secure': 'Failed password',
-        'sshd brute force secure' : 'PAM 5 more authentication failures',
-        'unix password check failed secure' : 'password check failed',
-        'auditd user login' : 'USER_LOGIN',
-        'auditd user logout' : 'USER_LOGOUT',
-        'auditd user authentication' : 'USER_AUTH'
-    }
+    # Use an OrderedDict to prioritize more specific keywords first.
+    LINUX_KEYWORDS = OrderedDict([
+        ('Too many authentication failures', 'BRUTE_FORCE_SUSPECTED'),
+        ('Failed password', 'FAILED_LOGIN'),
+        ('authentication failure', 'AUTH_FAILURE'),
+        ('invalid user', 'INVALID_USER'),
+        ('Accepted password', 'SUCCESSFUL_LOGIN'),
+        ('Accepted publickey', 'SUCCESSFUL_LOGIN_KEY'),
+        ('session opened for user', 'SESSION_OPENED'),
+        # Keywords for auditd logs
+        ('type=USER_LOGIN', 'AUDIT_USER_LOGIN'),
+        ('type=USER_AUTH', 'AUDIT_USER_AUTH'),
+        ('type=USER_LOGOUT', 'AUDIT_USER_LOGOUT')
+    ])
 
 # --- Brute-Force Detection Global Variable ---
-# Stores recent failed login attempts: {source_ip: [timestamp1, timestamp2, ...]}
 failed_attempts = defaultdict(lambda: deque())
 
 # --- Core Agent Functions ---
@@ -76,14 +67,12 @@ def get_device_info():
     try:
         os_name = platform.system()
         device_name = socket.gethostname().split('.')[0]
-        # Discover the primary IP address by connecting to the server
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.settimeout(5)
             s.connect((SERVER_IP, SERVER_PORT))
             client_ip = s.getsockname()[0]
     except Exception as e:
         print(f"[!] Error getting device info: {e}")
-        # Fallback for offline or unusual network configs
         client_ip = "127.0.0.1"
         device_name = "unknown-host"
         os_name = platform.system()
@@ -105,10 +94,7 @@ def run_heartbeat(server_ip, heartbeat_port):
         while True:
             try:
                 sock.sendto(b'heartbeat', (server_ip, heartbeat_port))
-                # print(f"[+] Heartbeat sent to {server_ip}:{heartbeat_port}") # Uncomment for verbose logging
                 data, addr = sock.recvfrom(1024)
-                # if data == b'ack':
-                #     print(f"[+] Acknowledgement received from {addr}") # Uncomment for verbose logging
             except socket.timeout:
                 print(f"[!] Warning: No heartbeat acknowledgement received from the server.")
             except socket.error as e:
@@ -125,7 +111,7 @@ def send_alert_to_server(alert_data, device_info):
         "alert": alert_data
     }
     try:
-        print(f"[*] Sending alert to server: {alert_data['type']}")
+        # print(f"[*] Sending alert to server: {alert_data['type']}") # Uncomment for verbose logging
         requests.post(api_url, json=payload, timeout=5)
     except requests.RequestException as e:
         print(f"[!] Failed to send alert to server: {e}")
@@ -187,23 +173,33 @@ def tail_f(filename):
             yield line
 
 def monitor_linux_logs(device_info):
-    """Monitors Linux auth/secure log files."""
+    """Monitors Linux auth/secure log files with prioritized keywords."""
     print("[*] Starting Linux security log monitor...")
-    log_file_to_watch = next((f for f in LINUX_LOG_FILES if os.path.exists(f)), None)
+    
+    # Start monitoring all available log files in separate threads
+    log_files_to_watch = [f for f in LINUX_LOG_FILES if os.path.exists(f)]
 
-    if not log_file_to_watch:
-        print("[!] Could not find a suitable log file to monitor on this system.")
+    if not log_files_to_watch:
+        print("[!] Could not find any suitable log files to monitor on this system.")
         return
 
-    print(f"[*] Watching log file: {log_file_to_watch}")
+    for log_file in log_files_to_watch:
+        thread = threading.Thread(target=watch_single_log, args=(log_file, device_info), daemon=True)
+        thread.start()
+        print(f"[*] Started watching log file: {log_file}")
+
+def watch_single_log(log_file, device_info):
+    """Watches a single log file for keywords."""
     try:
-        for line in tail_f(log_file_to_watch):
+        for line in tail_f(log_file):
+            # Iterate through the ordered dictionary of keywords
             for keyword, event_type in LINUX_KEYWORDS.items():
                 if keyword in line:
                     alert_details = {"type": event_type, "log_entry": line.strip()}
                     send_alert_to_server(alert_details, device_info)
 
-                    if "FAILED_LOGIN" in event_type or "INVALID_USER" in event_type or "failed authentication" in event_type or "maximum authentication attempts exceeded" in event_type:
+                    # Trigger brute-force check on specific failure types
+                    if event_type in ['FAILED_LOGIN', 'INVALID_USER', 'AUTH_FAILURE', 'BRUTE_FORCE_SUSPECTED']:
                         parts = line.split()
                         ip_address = 'N/A'
                         if 'from' in parts:
@@ -212,10 +208,14 @@ def monitor_linux_logs(device_info):
                             except IndexError:
                                 pass
                         check_brute_force(ip_address, device_info)
+                    
+                    # Break after the first (most specific) match is found
+                    break 
     except PermissionError:
-        print("[!] Permission denied. Please run this agent with 'sudo' on Linux.")
+        print(f"[!] Permission denied for {log_file}. Please run this agent with 'sudo'.")
     except Exception as e:
-        print(f"[!] An error occurred in the Linux log monitor: {e}")
+        print(f"[!] An error occurred while watching {log_file}: {e}")
+
 
 def start_security_monitor(device_info):
     """Starts the appropriate OS-specific log monitoring function."""
@@ -250,11 +250,9 @@ def main():
             time.sleep(15)
 
     print("[*] Starting background services...")
-    # Start the heartbeat thread
     heartbeat_thread = threading.Thread(target=run_heartbeat, args=(SERVER_IP, HEARTBEAT_PORT), daemon=True)
     heartbeat_thread.start()
 
-    # Start the security monitor thread
     security_thread = threading.Thread(target=start_security_monitor, args=(device_info,), daemon=True)
     security_thread.start()
 
