@@ -88,7 +88,8 @@ class NymphAgent:
                 finally:
                     with self.status_lock:
                         status_val = self.status["ssh"].upper()
-                        log_msg = f"SSH:{status_val}:{self.ip}:{SSH_PORT}:{datetime.now()}"
+                        # FIX: Use self.ssh_port instead of SSH_PORT
+                        log_msg = f"SSH:{status_val}:{self.ip}:{self.ssh_port}:{datetime.now()}"
                         if status_val == "ONLINE":
                             logger.info(log_msg)
                         else:
@@ -164,14 +165,15 @@ def main():
         with nymph_agents_lock:
             if key not in nymph_agents:
                 logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
+                # FIX: Use .get() with defaults for optional fields
                 nymph_agent = NymphAgent(
                     data['ip'], data['device_name'], 
                     os_name=os_name, 
-                    ssh=data['ssh_service'] if True and not None else False,
-                    ssh_port=data['ssh_port'] if not None and data['ssh_service'] else 22,
-                    http=data['http_service'] if True and not None else False,
-                    http_port=data['http_port'] if not None else 80
-                    )
+                    ssh=data.get('ssh_service', True),
+                    ssh_port=data.get('ssh_port', 22),
+                    http=data.get('http_service', True),
+                    http_port=data.get('http_port', 80)
+                )
                 nymph_agents[key] = nymph_agent
                 nymph_agent.start_detection_threads()
             else:
