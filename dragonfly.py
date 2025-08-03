@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 
 # --- Configuration ---
-DRAGONFLY_IP = "10.23.24.7"
+DRAGONFLY_IP = "localhost"  # Change to your server's IP if needed
 DRAGONFLY_PORT = 8080
 HEARTBEAT_PORT = 9999
 
@@ -144,7 +144,28 @@ def main():
     def index():
         """Serves the main dashboard page."""
         return render_template('index.html')
+    
+    @app.route("/logout")
+    def logout():
+        """Handles user logout."""
+        # Here you would typically clear session data or tokens
+        return jsonify({"message": "Logged out successfully"}), 200
+    
+    @app.route('/dashboard')
+    def dashboard():
+        """Serves the dashboard page with agent status."""
+        with nymph_agents_lock:
+            agents_list = [agent.get_status() for agent in nymph_agents.values()]
+        return render_template('dashboard.html', agents=agents_list)
 
+    @app.route('/nymph_agents')
+    def nymph_agents_view():
+        """Displays the list of registered Nymph agents."""
+        with nymph_agents_lock:
+            agents_list = [agent.get_status() for agent in nymph_agents.values()]
+        return render_template('nymph_agents.html', agents=agents_list)
+
+    # API Routes 
     @app.route('/status')
     def get_status():
         """Provides the status of all agents as JSON."""

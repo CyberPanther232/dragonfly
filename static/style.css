@@ -124,3 +124,49 @@ footer {
     font-weight: bold;
     color: var(--primary-text);
 }
+
+/* Navbar styles - Blue Themed */
+.navbar {
+    background: linear-gradient(90deg, #223a5e 0%, #274472 100%);
+    box-shadow: 0 2px 8px rgba(34, 58, 94, 0.12);
+    padding: 0.5em 0;
+    margin-bottom: 2em;
+}
+.navbar ul {
+    list-style: none;
+    display: flex;
+    gap: 2.5em;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+}
+.navbar li {
+    display: inline;
+}
+.navbar a {
+    color: #e0e7ff;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 1.13em;
+    padding: 0.5em 1.2em;
+    border-radius: 4px;
+    transition: 
+        background 0.2s,
+        color 0.2s,
+        box-shadow 0.2s;
+    letter-spacing: 0.5px;
+}
+.navbar a:hover, .navbar a:focus {
+    background: #58A6FF;
+    color: #223a5e;
+    box-shadow: 0 2px 8px rgba(88,166,255,0.18);
+    outline: none;
+}
+.navbar a.active {
+    background: #e0e7ff;
+    color: #223a5e;
+    font-weight: 700;
+    box-shadow: 0 2px 8px rgba(88,166,255,0.12);
+}
+

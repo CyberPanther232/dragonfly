@@ -13,6 +13,15 @@
         <h1>Dragonfly Agents Status</h1>
     </header>
 
+    <nav class="navbar">
+        <ul>
+            <li><a href="{{ url_for('index') }}">Home</a></li>
+            <li><a href="{{ url_for('dashboard') }}">Alerts Dashboard</a></li>
+            <li><a href="{{ url_for('nymph_agents_view') }}">Agents List</a></li>
+            <li><a href="{{ url_for('logout') }}">Logout</a></li>
+        </ul>
+    </nav>
+
     <main id="agent-container" class="container">
         </main>
     
