@@ -56,7 +56,13 @@ else:
         'authentication failure': 'AUTH_FAILURE',
         'session opened for user': 'SESSION_OPENED',
         'invalid user': 'INVALID_USER',
-        'sshd'
+        'sshd login success secure': 'SSH_LOGIN_SUCCESS',
+        'sshd login failure secure': 'Failed password',
+        'sshd brute force secure' : 'PAM 5 more authentication failures',
+        'unix password check failed secure' : 'password check failed',
+        'auditd user login' : 'USER_LOGIN',
+        'auditd user logout' : 'USER_LOGOUT',
+        'auditd user authentication' : 'USER_AUTH'
     }
 
 # --- Brute-Force Detection Global Variable ---
@@ -197,7 +203,7 @@ def monitor_linux_logs(device_info):
                     alert_details = {"type": event_type, "log_entry": line.strip()}
                     send_alert_to_server(alert_details, device_info)
 
-                    if "FAILED_LOGIN" in event_type or "INVALID_USER" in event_type:
+                    if "FAILED_LOGIN" in event_type or "INVALID_USER" in event_type or "failed authentication" in event_type or "maximum authentication attempts exceeded" in event_type:
                         parts = line.split()
                         ip_address = 'N/A'
                         if 'from' in parts:
