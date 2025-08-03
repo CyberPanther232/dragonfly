@@ -45,7 +45,7 @@ else:
     # Log files for Linux
     LINUX_LOG_FILES = [
         '/var/log/auth.log',    # For Debian/Ubuntu
-        '/var/log/secure'       # For RHEL/CentOS/Fedora
+        '/var/log/secure',       # For RHEL/CentOS/Fedora
         '/var/log/audit/audit.log'  # For systems using auditd
     ]
     # Keywords to find in Linux logs
