@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragonfly - Registered Agents</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <header>
+        <h1>Registered Dragonfly Agents</h1>
+    </header>
+
+    <nav class="navbar">
+        <ul>
+            <li><a href="{{ url_for('dashboard') }}">Alerts Dashboard</a></li>
+            <li><a href="{{ url_for('nymph_agents_view') }}" class="active">Agents List</a></li>
+            <li><a href="{{ url_for('logout') }}">Logout</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <section>
+            <h2>Live Agent Status</h2>
+            <!-- This container will be filled with agent cards by JavaScript -->
+            <div id="agent-container">
+                <div class="alert alert-info">Loading agent data...</div>
+            </div>
+        </section>
+    </main>
+    
+    <footer>
+        <p>Agent list refreshes every 10 seconds. Last updated: <span id="last-updated">Never</span></p>
+    </footer>
+
+    <!-- Reference the updated list_agents.js script -->
+    <script src="{{ url_for('static', filename='list_agents.js') }}"></script>
+</body>
+</html>

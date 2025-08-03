@@ -1,0 +1,338 @@
+/* --- Global Styles & Color Palette --- */
+:root {
+    --dark-bg: #121828;
+    --primary-card-bg: #1B263B;
+    --secondary-card-bg: #2a3952;
+    --border-color: #415A77;
+    --primary-text: #E0E1DD;
+    --secondary-text: #a8b2c5;
+    --accent-blue: #58A6FF;
+    --status-online: #3FB950;
+    --status-offline: #F85149;
+    --status-unknown: #9A9A9A;
+    --alert-success-bg: rgba(63, 185, 80, 0.1);
+    --alert-success-border: #3FB950;
+    --alert-warning-bg: rgba(255, 193, 7, 0.1);
+    --alert-warning-border: #ffc107;
+    --alert-danger-bg: rgba(248, 81, 73, 0.1);
+    --alert-danger-border: #F85149;
+    --alert-info-bg: rgba(88, 166, 255, 0.1);
+    --alert-info-border: #58A6FF;
+}
+
+body {
+    background-color: var(--dark-bg);
+    color: var(--primary-text);
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    font-weight: 300;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    padding: 20px;
+    background-color: transparent;
+    border-bottom: 1px solid var(--border-color);
+}
+
+header h1 {
+    margin: 0;
+    color: var(--accent-blue);
+    font-weight: 700;
+    font-size: 2.5em;
+    letter-spacing: 1px;
+}
+
+section h2 {
+    color: var(--primary-text);
+    border-bottom: 2px solid var(--accent-blue);
+    padding-bottom: 10px;
+    margin-bottom: 30px;
+    font-size: 1.8em;
+    font-weight: 400;
+}
+
+/* --- Navbar Styles --- */
+.navbar {
+    background: var(--primary-card-bg);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    padding: 0.75em 0;
+    margin-bottom: 2em;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.navbar ul {
+    list-style: none;
+    display: flex;
+    gap: 2.5em;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+}
+
+.navbar a {
+    color: var(--secondary-text);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 1.1em;
+    padding: 0.6em 1.3em;
+    border-radius: 8px;
+    transition: all 0.2s ease-in-out;
+}
+
+.navbar a:hover, .navbar a:focus {
+    background: var(--accent-blue);
+    color: var(--dark-bg);
+    box-shadow: 0 2px 8px rgba(88, 166, 255, 0.2);
+    outline: none;
+}
+
+.navbar a.active {
+    background: var(--accent-blue);
+    color: var(--dark-bg);
+    font-weight: 700;
+}
+
+/* --- Dashboard & Chart Styles --- */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+.chart-container {
+    background-color: var(--primary-card-bg);
+    padding: 60px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    height: 450px; /* Crucial: Constrains the height of the chart's container */
+    position: relative; /* Needed for Chart.js responsiveness */
+}
+
+.chart-container h3 {
+    margin-top: 0;
+    text-align: center;
+    color: var(--secondary-text);
+    font-weight: 400;
+}
+
+/* --- Live Alerts Panel --- */
+.live-alerts-panel {
+    background-color: var(--primary-card-bg);
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    overflow: hidden; /* Important for containing children */
+    display: flex; /* Use flexbox for layout */
+    flex-direction: column; /* Stack children vertically */
+}
+
+.filter-controls {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0; /* Prevent the filter from shrinking */
+}
+
+.filter-controls input,
+.filter-controls select {
+    flex-grow: 1;
+    padding: 12px 15px;
+    background-color: var(--secondary-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--primary-text);
+    font-size: 1em;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.filter-controls input:focus,
+.filter-controls select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+}
+
+.filter-controls input::placeholder {
+    color: var(--secondary-text);
+}
+
+#alerts-list {
+    max-height: 70vh; /* Set a maximum height relative to viewport */
+    overflow-y: auto; /* Enable vertical scrolling */
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+
+/* --- Agent Card Layout --- */
+#agent-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 30px;
+    padding-top: 20px;
+}
+
+.agent-card {
+    background-color: var(--primary-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    padding: 25px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.agent-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 10px 25px rgba(88, 166, 255, 0.25);
+    border-color: var(--accent-blue);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.os-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+}
+
+.os-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: var(--secondary-text);
+}
+
+.card-header-text h2 {
+    margin: 0;
+    font-size: 1.5em;
+    color: var(--primary-text);
+    font-weight: 500;
+}
+
+.card-header-text p {
+    margin: 2px 0 0;
+    color: var(--secondary-text);
+    font-size: 0.9em;
+}
+
+.status-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+.status-item {
+    background-color: var(--secondary-card-bg);
+    padding: 12px 15px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1em;
+    font-weight: 400;
+    transition: background-color 0.2s;
+}
+
+.status-item:hover {
+    background-color: #354661;
+}
+
+.status-dot {
+    height: 12px;
+    width: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.status-dot.online { background-color: var(--status-online); box-shadow: 0 0 8px var(--status-online); }
+.status-dot.offline { background-color: var(--status-offline); box-shadow: 0 0 8px var(--status-offline); }
+.status-dot.unknown { background-color: var(--status-unknown); }
+
+
+/* --- Security Alert Styles --- */
+.alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    border-left-width: 5px;
+    background-color: var(--secondary-card-bg);
+}
+
+.alert-icon svg {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.alert-content { flex-grow: 1; }
+.alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+.alert-timestamp {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--secondary-text);
+}
+.alert-body code {
+    display: block;
+    background-color: rgba(0,0,0,0.2);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    margin-top: 0.25rem;
+    font-family: 'Courier New', Courier, monospace;
+    word-break: break-all;
+}
+
+/* Alert Severity Colors */
+.alert-info { background-color: var(--alert-info-bg); border-color: var(--alert-info-border); }
+.alert-success { background-color: var(--alert-success-bg); border-color: var(--alert-success-border); }
+.alert-warning { background-color: var(--alert-warning-bg); border-color: var(--alert-warning-border); }
+.alert-danger { background-color: var(--alert-danger-bg); border-color: var(--alert-danger-border); }
+
+.icon-success { stroke: var(--status-online); }
+.icon-warning { stroke: #ffc107; }
+.icon-danger { stroke: var(--status-offline); }
+
+/* --- Footer --- */
+footer {
+    text-align: center;
+    padding: 20px;
+    margin-top: 40px;
+    color: var(--secondary-text);
+    font-size: 0.8em;
+}
+
+#last-updated {
+    font-weight: bold;
+    color: var(--primary-text);
+}

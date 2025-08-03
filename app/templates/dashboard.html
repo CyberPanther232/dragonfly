@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dragonfly - Alert Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    <!-- Add Chart.js library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <header>
+        <h1>Dragonfly Alert Dashboard</h1>
+    </header>
+
+    <nav class="navbar">
+        <ul>
+            <li><a href="{{ url_for('dashboard') }}" class="active">Alerts Dashboard</a></li>
+            <li><a href="{{ url_for('nymph_agents_view') }}">Agents List</a></li>
+            <li><a href="{{ url_for('logout') }}">Logout</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <!-- Visualization Section -->
+        <section>
+            <h2>Dashboard Overview</h2>
+            <div class="dashboard-grid">
+                <div class="chart-container">
+                    <h3>Alerts by Type</h3>
+                    <canvas id="alertsByTypeChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Alerts by Agent</h3>
+                    <canvas id="alertsByAgentChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Alerts Section -->
+        <section>
+            <h2>Live Security Alerts</h2>
+            <!-- New panel to contain filters and the scrollable list -->
+            <div class="live-alerts-panel">
+                <div class="filter-controls">
+                    <input type="text" id="filter-text" placeholder="Filter by details, IP, or device name...">
+                    <select id="filter-type">
+                        <option value="">All Alert Types</option>
+                        <!-- Options will be populated by JS -->
+                    </select>
+                </div>
+                <div id="alerts-list">
+                    <div class="alert alert-info"><strong>Loading alerts...</strong></div>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <footer>
+        <p>Dashboard refreshes every 15 seconds. Last updated: <span id="last-updated">Never</span></p>
+    </footer>
+
+    <!-- Reference the dashboard.js script -->
+    <script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+</body>
+</html>
