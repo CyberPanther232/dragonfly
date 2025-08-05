@@ -90,8 +90,8 @@ v                        v
 
 1.  **Clone the repository:**
     ```bash
-    git clone <your-repo-url>
-    cd dragonfly-server
+    git clone https://github.com/CyberPanther232/dragonfly
+    cd dragonfly/app
     ```
 
 2.  **Install dependencies:**
