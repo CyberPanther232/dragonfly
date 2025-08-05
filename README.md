@@ -40,7 +40,7 @@ Dragonfly operates on a classic client-server model:
 * **Dragonfly Server:** This is the core of the system. It's a Python Flask application that serves the web dashboard, listens for agent registrations, receives heartbeats, and collects security alerts via a REST API.
 * **Nymph Agent:** A Python script deployed on each endpoint you want to monitor. It gathers system information, tails security logs in a separate thread, and sends alerts back to the Dragonfly Server.
 
-
+```
 +------------------+      +------------------+
 |  Linux Endpoint  |      | Windows Endpoint |
 |  (Nymph Agent)   |      |  (Nymph Agent)   |
