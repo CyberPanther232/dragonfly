@@ -1,6 +1,6 @@
 # Dragonfly SIEM
 
-![Dragonfly Banner]()
+![Dragonfly Banner](https://github.com/CyberPanther232/dragonfly/blob/5012b75ed55a28d119a47b13452784cc64aa368f/Dragonfly_logo.png)
 
 A lightweight, agent-based Security Information and Event Management (SIEM) system designed for real-time monitoring of security events across Windows and Linux endpoints.
 
