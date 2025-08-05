@@ -6,7 +6,7 @@ A lightweight, agent-based Security Information and Event Management (SIEM) syst
 
 ---
 
-## Table of Contents
+## Table of Contents - Work-In-Progress
 - [Key Features](#key-features)
 - [Architecture](#architecture)
 - [Dashboard Preview](#dashboard-preview)
