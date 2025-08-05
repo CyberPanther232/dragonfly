@@ -68,7 +68,7 @@ v                        v
 | (Web Browser)     |
 +-------------------+
 
-
+```
 ---
 
 ## Dashboard Preview
