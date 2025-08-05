@@ -73,8 +73,7 @@ v                        v
 
 ## Dashboard Preview
 
-*(Add a screenshot of your dashboard here)*
-![Dashboard Screenshot](https://i.imgur.com/your-screenshot-url.png)
+![Dashboard Screenshot](https://github.com/CyberPanther232/dragonfly/blob/8e3f9150a0f0a184ae477961eb65cab867ae5c44/dashboard_screenshot.png)
 
 ---
 
