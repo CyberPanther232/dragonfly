@@ -181,32 +181,45 @@ def main():
         logger.warning(f"ALERT RECEIVED from {data['agent_info'].get('device_name')}: {data['alert'].get('type')}")
         return jsonify({"message": "Alert received"}), 200
 
-    @app.route('/nymph', methods=['POST'])
+    @app.route('/nymph', methods=['GET', 'POST'])
     def nymph_handler():
-        """Registers a new Nymph agent."""
-        data = request.json
-        if not data or 'ip' not in data or 'device_name' not in data:
-            return jsonify({"error": "Invalid request, 'ip' and 'device_name' are required"}), 400
+        if request.method == 'POST':
+            data = request.json
+            if not data or 'ip' not in data or 'device_name' not in data:
+                return jsonify({"error": "Invalid request, 'ip' and 'device_name' are required"}), 400
 
-        key = (data['ip'], data['device_name'])
-        with nymph_agents_lock:
-            if key not in nymph_agents:
-                logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
-                nymph_agent = NymphAgent(
-                    ip=data['ip'], 
-                    device_name=data['device_name'],
-                    os_name=data.get('os'),
-                    ssh=data.get('ssh_service', True),
-                    ssh_port=data.get('ssh_port', 22),
-                    http=data.get('http_service', True),
-                    http_port=data.get('http_port', 80)
-                )
-                nymph_agents[key] = nymph_agent
-                nymph_agent.start_detection_threads()
-            else:
-                nymph_agent = nymph_agents[key]
+            key = (data['ip'], data['device_name'])
+            with nymph_agents_lock:
+                if key not in nymph_agents:
+                    logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
+                    nymph_agent = NymphAgent(
+                        ip=data['ip'], 
+                        device_name=data['device_name'],
+                        os_name=data.get('os'),
+                        ssh=data.get('ssh_service', True),
+                        ssh_port=data.get('ssh_port', 22),
+                        http=data.get('http_service', True),
+                        http_port=data.get('http_port', 80)
+                    )
+                    nymph_agents[key] = nymph_agent
+                    nymph_agent.start_detection_threads()
+                else:
+                    nymph_agent = nymph_agents[key]
 
-        return jsonify({"message": "Nymph agent processed", "status": nymph_agent.get_status()}), 200
+            return jsonify({"message": "Nymph agent processed", "status": nymph_agent.get_status()}), 200
+
+        # --- GET logic for sync check ---
+        elif request.method == 'GET':
+            ip = request.args.get('ip')
+            device_name = request.args.get('device_name')
+            if not ip or not device_name:
+                return jsonify({"error": "Missing 'ip' or 'device_name' in query parameters"}), 400
+            key = (ip, device_name)
+            with nymph_agents_lock:
+                if key in nymph_agents:
+                    return jsonify({"message": "Agent is registered", "status": nymph_agents[key].get_status()}), 200
+                else:
+                    return jsonify({"error": "Agent not registered"}), 404
 
     app.run(host=DRAGONFLY_IP, port=DRAGONFLY_PORT, debug=False)
 

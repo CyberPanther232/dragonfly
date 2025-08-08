@@ -297,11 +297,15 @@ def start_security_monitor(device_info):
 
 # --- Sync Monitoring ---
 
-def sync_monitor(api_url, check_interval=30):
+def sync_monitor(api_url, device_info, check_interval=30):
     """Continuously checks if the agent is still synced with the Dragonfly server."""
+    params = {
+        "ip": device_info["ip"],
+        "device_name": device_info["device_name"]
+    }
     while True:
         try:
-            response = requests.get(api_url, timeout=5)
+            response = requests.get(api_url, params=params, timeout=5)
             if response.status_code == 200:
                 print("[SYNC] Still synced with Dragonfly server.")
             else:
@@ -338,7 +342,7 @@ def main():
     # --- Start sync monitor thread here ---
     sync_thread = threading.Thread(
         target=sync_monitor,
-        args=(api_url,),
+        args=(api_url, device_info),
         daemon=True
     )
     sync_thread.start()
