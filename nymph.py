@@ -152,10 +152,8 @@ def process_failed_ssh_login(event, device_info):
     identifier = f"{user}@{ip_address}"
     check_brute_force(identifier, device_info)
 
-
 def monitor_windows_ssh(device_info):
-    
-   """Monitors the Windows Application Event Log."""
+    """Monitors the Windows Application Event Log."""
     print("[*] Starting Windows Application log monitor...")
     hand = win32evtlog.OpenEventLog(None, "OpenSSH/Operational")
     flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
