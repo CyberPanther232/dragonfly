@@ -207,11 +207,17 @@ def monitor_windows_logs(device_info):
             for event in events:
                 if event.EventID in WINDOWS_EVENT_IDS:
                     event_type = WINDOWS_EVENT_IDS[event.EventID]
+                    
+                    category = "security"
+                    severity = "medium" if event_type == "FAILED_LOGON" else "low"
+                    
                     alert_details = {
                         "type": event_type,
                         "source_name": event.SourceName,
                         "event_id": event.EventID,
-                        "details": list(event.StringInserts)
+                        "details": list(event.StringInserts),
+                        "category": category,
+                        "severity": severity
                     }
                     send_alert_to_server(alert_details, device_info)
 
@@ -255,11 +261,12 @@ def watch_single_log(log_file, device_info):
             # Iterate through the ordered dictionary of keywords
             for keyword, event_type in LINUX_KEYWORDS.items():
                 if keyword in line:
-                    alert_details = {"type": event_type, "log_entry": line.strip()}
-                    send_alert_to_server(alert_details, device_info)
-
+                    category = "informational"
+                    severity = "low"
                     # Trigger brute-force check on specific failure types
                     if event_type in ['FAILED_LOGIN', 'INVALID_USER', 'AUTH_FAILURE', 'BRUTE_FORCE_SUSPECTED']:
+                        severity = "medium" if event_type == 'FAILED_LOGIN' else "high" if event_type == 'BRUTE_FORCE_SUSPECTED' else "low"
+                        category = "security"
                         parts = line.split()
                         ip_address = 'N/A'
                         if 'from' in parts:
@@ -268,6 +275,9 @@ def watch_single_log(log_file, device_info):
                             except IndexError:
                                 pass
                         check_brute_force(ip_address, device_info)
+                    
+                    alert_details = {"type": event_type, "log_entry": line.strip(), "category": category, "severity": severity}
+                    send_alert_to_server(alert_details, device_info)
                     
                     # Break after the first (most specific) match is found
                     break 
