@@ -26,6 +26,8 @@ BRUTE_FORCE_TIMEFRAME_SECONDS = 60  # Time window to detect brute force
 if sys.platform == "win32":
     try:
         import win32evtlog
+        import win32evtlogutil
+        
     except ImportError:
         print("[!] The 'pywin32' library is required on Windows. Please run: pip install pywin32")
         sys.exit(1)
@@ -36,6 +38,7 @@ if sys.platform == "win32":
         4625: "FAILED_LOGON",
         4740: "ACCOUNT_LOCKOUT"
     }
+    
 else:
     LINUX_LOG_FILES = [
         '/var/log/auth.log',    # For Debian/Ubuntu
@@ -107,6 +110,8 @@ def send_alert_to_server(alert_data, device_info):
     """Sends a security alert to the Dragonfly server."""
     api_url = f"http://{SERVER_IP}:{SERVER_PORT}/alert"
     payload = {
+        "category": alert_data["category"],
+        "severity": alert_data["severity"] if "severity" in alert_data else "low",
         "agent_info": device_info,
         "alert": alert_data
     }
@@ -130,11 +135,66 @@ def check_brute_force(source_identifier, device_info):
             "type": "BRUTE_FORCE_ALERT",
             "source": source_identifier,
             "count": len(failed_attempts[source_identifier]),
-            "timeframe_seconds": BRUTE_FORCE_TIMEFRAME_SECONDS
+            "timeframe_seconds": BRUTE_FORCE_TIMEFRAME_SECONDS,
+            "category": "security",
+            "severity": "high"
         }
         send_alert_to_server(alert, device_info)
         failed_attempts[source_identifier].clear()
 
+def process_failed_ssh_login(event, device_info):
+    """
+    Tracks frequency of failed SSH login attempts for brute-force detection.
+    """
+    # Try to extract username and/or IP from event.StringInserts
+    user = event.StringInserts[5] if len(event.StringInserts) > 5 else 'N/A'
+    ip_address = event.StringInserts[18] if len(event.StringInserts) > 18 else 'N/A'
+    identifier = f"{user}@{ip_address}"
+    check_brute_force(identifier, device_info)
+
+
+def monitor_windows_ssh(device_info):
+    
+   """Monitors the Windows Application Event Log."""
+    print("[*] Starting Windows Application log monitor...")
+    hand = win32evtlog.OpenEventLog(None, "OpenSSH/Operational")
+    flags = win32evtlog.EVENTLOG_BACKWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+    
+    while True:
+        events = win32evtlog.ReadEventLog(hand, flags, 0)
+        if events:
+            for event in events:
+                if event.EventID in WINDOWS_EVENT_IDS:
+                    event_type = WINDOWS_EVENT_IDS[4]
+                    
+                    message = win32evtlogutil.SafeFormatMessage(event, "OpenSSH/Operational")
+                    timestamp = event.TimeGenerated.Format()
+                    category = "informational"
+                    severity = "low"
+            
+                    if "Too many authentication failures" in message:
+                        category = "security"
+                        severity = "high"
+                        
+                    elif "Failed password" in message or "Invalid user" in message:
+                        category = "informational"
+                        severity = "low"
+                        process_failed_ssh_login(event, device_info)
+                    
+                    alert_details = {
+                        "type": event_type,
+                        "source_name": event.SourceName,
+                        "event_id": event.EventID,
+                        "details": list(event.StringInserts),
+                        "category": category,
+                        "severity": severity
+                    }
+                    
+                    
+                    send_alert_to_server(alert_details, device_info)
+
+        time.sleep(POLL_INTERVAL_SECONDS)
+        
 def monitor_windows_logs(device_info):
     """Monitors the Windows Security Event Log."""
     print("[*] Starting Windows security log monitor...")
@@ -216,13 +276,31 @@ def watch_single_log(log_file, device_info):
     except Exception as e:
         print(f"[!] An error occurred while watching {log_file}: {e}")
 
-
 def start_security_monitor(device_info):
     """Starts the appropriate OS-specific log monitoring function."""
     if sys.platform == "win32":
-        monitor_windows_logs(device_info)
+        winevtlog_thread = threading.Thread(target=monitor_windows_logs, args=(device_info,), daemon=True)
+        winsshlog_thread = threading.Thread(target=monitor_windows_ssh, args=(device_info,), daemon=True)
+        winevtlog_thread.start()
+        winsshlog_thread.start()
+        
     else:
         monitor_linux_logs(device_info)
+
+# --- Sync Monitoring ---
+
+def sync_monitor(api_url, check_interval=30):
+    """Continuously checks if the agent is still synced with the Dragonfly server."""
+    while True:
+        try:
+            response = requests.get(api_url, timeout=5)
+            if response.status_code == 200:
+                print("[SYNC] Still synced with Dragonfly server.")
+            else:
+                print(f"[SYNC] Lost sync! Server responded with status {response.status_code}: {response.text}")
+        except requests.RequestException as e:
+            print(f"[SYNC] Lost sync! Network error: {e}")
+        time.sleep(check_interval)
 
 # --- Main Execution ---
 
@@ -248,6 +326,14 @@ def main():
         if not synced:
             print("[*] Retrying in 15 seconds...")
             time.sleep(15)
+
+    # --- Start sync monitor thread here ---
+    sync_thread = threading.Thread(
+        target=sync_monitor,
+        args=(api_url,),
+        daemon=True
+    )
+    sync_thread.start()
 
     print("[*] Starting background services...")
     heartbeat_thread = threading.Thread(target=run_heartbeat, args=(SERVER_IP, HEARTBEAT_PORT), daemon=True)
