@@ -51,6 +51,16 @@ class NymphAgent:
                 **self.status
             }
             return full_info
+        
+    def check_log(self):
+        """Placeholder for log checking logic."""
+        try:
+            with open(f'{self.device_name}.log', 'r') as log_file:
+                logs = log_file.readlines()
+        except FileNotFoundError:
+            logger.error(f"Log file for {self.device_name} not found.")
+            open(f'{self.device_name}.log', 'w').close()  # Create an empty log file if it doesn't exist
+
 
     def update_heartbeat(self):
         with self.status_lock:
@@ -137,6 +147,15 @@ def main():
     def logout():
         """Handles user logout."""
         return jsonify({"message": "Logged out successfully"}), 200
+    
+    @app.route("/agent-profile/<device_name>")
+    def agent_profile(device_name):
+        """Serves the agent profile page for a specific device."""
+        with nymph_agents_lock:
+            agent = next((agent for agent in nymph_agents.values() if agent.device_name == device_name), None)
+            if not agent:
+                return jsonify({"error": "Agent not found"}), 404
+            return render_template('agent_profile.html', agent=agent)
     
     @app.route('/dashboard')
     def dashboard():
