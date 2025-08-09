@@ -166,7 +166,8 @@ def main():
                     alert for alert in alerts_list
                     if alert.get('agent_info', {}).get('device_name', '').lower() == safe_device_name.lower()
                 ]
-            return render_template('agent_profile.html', agent=agent, alerts=agent_alerts)
+            # Pass agent.get_status() so the template can use dict-style access
+            return render_template('agent_profile.html', agent=agent.get_status(), alerts=agent_alerts)
     
     @app.route('/dashboard')
     def dashboard():
