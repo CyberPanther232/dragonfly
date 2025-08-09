@@ -1,0 +1,73 @@
+<!-- filepath: c:\Users\kinne\Desktop\Windows_Development\dragonfly\app\templates\agent_profile.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Agent Profile: {{ agent.device_name }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; background: #f7f9fa; }
+        h1 { color: #2c3e50; }
+        h3 { margin-top: 2em; color: #34495e; }
+        ul { list-style: none; padding: 0; }
+        li { margin-bottom: 0.5em; }
+        .status-online { color: #27ae60; font-weight: bold; }
+        .status-offline { color: #c0392b; font-weight: bold; }
+        table { border-collapse: collapse; width: 100%; margin-top: 2em; background: #fff; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background: #f0f0f0; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .back-link { margin-top: 2em; display: inline-block; color: #2980b9; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Agent Profile: {{ agent.device_name }}</h1>
+    <h3>Agent Info</h3>
+    <ul>
+        <li><strong>IP:</strong> {{ agent.ip }}</li>
+        <li><strong>OS:</strong> {{ agent.os }}</li>
+        <li><strong>HTTP Status:</strong>
+            <span class="status-{{ 'online' if agent.http == 'online' else 'offline' }}">{{ agent.http|capitalize }}</span>
+        </li>
+        <li><strong>SSH Status:</strong>
+            <span class="status-{{ 'online' if agent.ssh == 'online' else 'offline' }}">{{ agent.ssh|capitalize }}</span>
+        </li>
+        <li><strong>Heartbeat:</strong>
+            <span class="status-{{ 'online' if agent.heartbeat == 'online' else 'offline' }}">{{ agent.heartbeat|capitalize }}</span>
+        </li>
+    </ul>
+
+    <h3>Alerts</h3>
+    {% if alerts %}
+    <table>
+        <tr>
+            <th>Timestamp</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Category</th>
+            <th>Details</th>
+        </tr>
+        {% for alert in alerts %}
+        <tr>
+            <td>{{ alert.timestamp }}</td>
+            <td>{{ alert.alert.type }}</td>
+            <td>{{ alert.alert.severity|capitalize }}</td>
+            <td>{{ alert.alert.category|capitalize }}</td>
+            <td>
+                {% if alert.alert.log_entry %}
+                    {{ alert.alert.log_entry }}
+                {% elif alert.alert.details %}
+                    {{ alert.alert.details }}
+                {% else %}
+                    N/A
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+        <p>No alerts for this agent.</p>
+    {% endif %}
+    <a class="back-link" href="{{ url_for('dashboard') }}">&larr; Back to Dashboard</a>
+</body>
+</html>
