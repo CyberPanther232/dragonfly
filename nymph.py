@@ -303,14 +303,24 @@ def sync_monitor(api_url, device_info, check_interval=30):
         "ip": device_info["ip"],
         "device_name": device_info["device_name"]
     }
+    
+    synced = True
+    
     while True:
         try:
-            response = requests.get(api_url, params=params, timeout=5)
-            if response.status_code == 200:
-                print("[SYNC] Still synced with Dragonfly server.")
+            if synced:
+                response = requests.get(api_url, params=params, timeout=5)
             else:
+                response = requests.post(api_url, json=device_info, timeout=5)
+                print(f"[SYNC] Attempting resync with Dragonfly server at {api_url}...")
+            
+            if response.status_code == 200:
+                print("[SYNC] Synced with Dragonfly server.")
+            else:
+                synced = False
                 print(f"[SYNC] Lost sync! Server responded with status {response.status_code}: {response.text}")
         except requests.RequestException as e:
+            synced = False
             print(f"[SYNC] Lost sync! Network error: {e}")
         time.sleep(check_interval)
 
