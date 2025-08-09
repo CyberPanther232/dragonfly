@@ -6,6 +6,109 @@
     <title>Agent Profile - {{ agent.device_name }}</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Additional styles for the Agent Profile page to ensure it matches the theme */
+        .profile-container {
+            background-color: var(--primary-card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 30px;
+            margin-top: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .profile-container h2, .profile-container h3 {
+            color: var(--primary-text);
+            border-bottom: 2px solid var(--accent-blue);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+            font-weight: 400;
+        }
+
+        .agent-info-list {
+            list-style: none;
+            padding: 0;
+            margin-bottom: 40px;
+        }
+
+        .agent-info-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid var(--secondary-card-bg);
+            font-size: 1.1em;
+            border-radius: 6px;
+            transition: background-color 0.2s;
+        }
+        
+        .agent-info-list li:hover {
+            background-color: var(--secondary-card-bg);
+        }
+
+        .agent-info-list li:last-child {
+            border-bottom: none;
+        }
+
+        .agent-info-list strong {
+            color: var(--secondary-text);
+            margin-right: 15px;
+        }
+
+        .status-online { color: var(--status-online); font-weight: 700; }
+        .status-offline { color: var(--status-offline); font-weight: 700; }
+        .status-unknown { color: var(--status-unknown); font-weight: 700; }
+
+        .alerts-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .alerts-table th, .alerts-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .alerts-table thead th {
+            background-color: var(--secondary-card-bg);
+            color: var(--accent-blue);
+            font-weight: 500;
+        }
+
+        .alerts-table tbody tr:hover {
+            background-color: #354661;
+        }
+
+        .alerts-table code {
+            display: block;
+            background-color: rgba(0,0,0,0.2);
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 30px;
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-weight: 500;
+            padding: 10px 15px;
+            border: 1px solid var(--accent-blue);
+            border-radius: 6px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .back-link:hover {
+            background-color: var(--accent-blue);
+            color: var(--dark-bg);
+        }
+    </style>
 </head>
 <body>
     <header>
