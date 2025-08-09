@@ -60,6 +60,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function createAgentCard(agent) {
         const card = document.createElement('div');
         card.className = 'agent-card';
+        card.style.cursor = 'pointer';
 
         const osKey = (agent.os || 'unknown').toLowerCase();
         const osIcon = OS_ICONS[osKey] || OS_ICONS['unknown'];
@@ -88,6 +89,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 ${createStatusItem('HTTP', agent.http)}
             </div>
         `;
+
+        // Add click event to redirect to the agent profile page
+        card.addEventListener('click', function() {
+            window.location.href = `/agent-profile/${encodeURIComponent(agent.device_name)}`;
+        });
+
         return card;
     }
 
