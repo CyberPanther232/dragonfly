@@ -1,59 +1,75 @@
-<!-- filepath: c:\Users\kinne\Desktop\Windows_Development\dragonfly\app\templates\agent_profile.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Agent Profile: {{ agent.device_name }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Profile - {{ agent.device_name }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <h1>Agent Profile: {{ agent.device_name }}</h1>
-    <h3>Agent Info</h3>
-    <ul>
-        <li><strong>IP:</strong> <a href="http://{{ agent.ip }}" target="_blank" rel="noopener noreferrer">{{ agent.ip }}</a></li>
-        <li><strong>OS:</strong> {{ agent.os }}</li>
-        <li><strong>HTTP Status:</strong>
-            <span class="status-{{ 'online' if agent.http == 'online' else 'offline' }}">{{ agent.http|capitalize }}</span>
-        </li>
-        <li><strong>SSH Status:</strong>
-            <span class="status-{{ 'online' if agent.ssh == 'online' else 'offline' }}">{{ agent.ssh|capitalize }}</span>
-        </li>
-        <li><strong>Heartbeat:</strong>
-            <span class="status-{{ 'online' if agent.heartbeat == 'online' else 'offline' }}">{{ agent.heartbeat|capitalize }}</span>
-        </li>
-    </ul>
+    <header>
+        <h1>Dragonfly</h1>
+    </header>
 
-    <h3>Alerts</h3>
-    {% if alerts %}
-    <table>
-        <tr>
-            <th>Timestamp</th>
-            <th>Type</th>
-            <th>Severity</th>
-            <th>Category</th>
-            <th>Details</th>
-        </tr>
-        {% for alert in alerts %}
-        <tr>
-            <td>{{ alert.timestamp }}</td>
-            <td>{{ alert.alert.type }}</td>
-            <td>{{ alert.alert.severity|capitalize }}</td>
-            <td>{{ alert.alert.category|capitalize }}</td>
-            <td>
-                {% if alert.alert.log_entry %}
-                    <code>{{ alert.alert.log_entry }}</code>
-                {% elif alert.alert.details %}
-                    {{ alert.alert.details }}
-                {% else %}
-                    N/A
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-        <p>No alerts for this agent.</p>
-    {% endif %}
-    <a class="back-link" href="{{ url_for('dashboard') }}">&larr; Back to Dashboard</a>
+    <nav class="navbar">
+        <ul>
+            <li><a href="{{ url_for('dashboard') }}">Alerts Dashboard</a></li>
+            <li><a href="{{ url_for('nymph_agents_view') }}" class="active">Agents List</a></li>
+            <li><a href="{{ url_for('logout') }}">Logout</a></li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        <div class="profile-container">
+            <h2>Agent Profile: {{ agent.device_name }}</h2>
+            
+            <h3>Agent Info</h3>
+            <ul class="agent-info-list">
+                <li><strong>IP Address:</strong> <a href="http://{{ agent.ip }}" target="_blank" rel="noopener noreferrer" style="color: var(--accent-blue);">{{ agent.ip }}</a></li>
+                <li><strong>Operating System:</strong> {{ agent.os }}</li>
+                <li><strong>HTTP Status:</strong> <span class="status-{{ 'online' if agent.http == 'online' else 'offline' }}">{{ agent.http|capitalize }}</span></li>
+                <li><strong>SSH Status:</strong> <span class="status-{{ 'online' if agent.ssh == 'online' else 'offline' }}">{{ agent.ssh|capitalize }}</span></li>
+                <li><strong>Last Heartbeat:</strong> <span class="status-{{ 'online' if agent.heartbeat == 'online' else 'offline' }}">{{ agent.heartbeat|capitalize }}</span></li>
+            </ul>
+
+            <h3>Alerts</h3>
+            {% if alerts %}
+            <table class="alerts-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Type</th>
+                        <th>Severity</th>
+                        <th>Category</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alert in alerts %}
+                    <tr>
+                        <td>{{ alert.timestamp }}</td>
+                        <td>{{ alert.alert.type }}</td>
+                        <td>{{ alert.alert.severity|capitalize }}</td>
+                        <td>{{ alert.alert.category|capitalize }}</td>
+                        <td>
+                            {% if alert.alert.log_entry %}
+                                <code>{{ alert.alert.log_entry }}</code>
+                            {% elif alert.alert.details %}
+                                {{ alert.alert.details }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p>No alerts recorded for this agent.</p>
+            {% endif %}
+        </div>
+        <a class="back-link" href="{{ url_for('nymph_agents_view') }}">&larr; Back to Agents List</a>
+    </main>
 </body>
 </html>
