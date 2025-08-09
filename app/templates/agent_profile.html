@@ -10,7 +10,7 @@
     <h1>Agent Profile: {{ agent.device_name }}</h1>
     <h3>Agent Info</h3>
     <ul>
-        <li><strong>IP:</strong> {{ agent.ip }}</li>
+        <li><strong>IP:</strong> <a href="http://{{ agent.ip }}" target="_blank" rel="noopener noreferrer">{{ agent.ip }}</a></li>
         <li><strong>OS:</strong> {{ agent.os }}</li>
         <li><strong>HTTP Status:</strong>
             <span class="status-{{ 'online' if agent.http == 'online' else 'offline' }}">{{ agent.http|capitalize }}</span>
@@ -41,7 +41,7 @@
             <td>{{ alert.alert.category|capitalize }}</td>
             <td>
                 {% if alert.alert.log_entry %}
-                    {{ alert.alert.log_entry }}
+                    <code>{{ alert.alert.log_entry }}</code>
                 {% elif alert.alert.details %}
                     {{ alert.alert.details }}
                 {% else %}
