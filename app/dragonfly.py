@@ -155,7 +155,10 @@ def main():
             agent = next((agent for agent in nymph_agents.values() if agent.device_name == device_name), None)
             if not agent:
                 return jsonify({"error": "Agent not found"}), 404
-            return render_template('agent_profile.html', agent=agent)
+            # Filter alerts for this agent
+            with alerts_lock:
+                agent_alerts = [alert for alert in alerts_list if alert.get('agent_info', {}).get('device_name') == device_name]
+            return render_template('agent_profile.html', agent=agent, alerts=agent_alerts)
     
     @app.route('/dashboard')
     def dashboard():
