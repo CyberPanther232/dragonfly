@@ -5,6 +5,7 @@ import time
 from flask import Flask, request, jsonify, render_template, url_for
 import logging
 from datetime import datetime
+from urllib.parse import unquote
 
 # --- Configuration ---
 DRAGONFLY_IP = "0.0.0.0"  # Bind to all interfaces to be accessible
@@ -151,13 +152,20 @@ def main():
     @app.route("/agent-profile/<device_name>")
     def agent_profile(device_name):
         """Serves the agent profile page for a specific device."""
+        safe_device_name = unquote(device_name)
         with nymph_agents_lock:
-            agent = next((agent for agent in nymph_agents.values() if agent.device_name == device_name), None)
+            agent = next(
+                (agent for agent in nymph_agents.values() if agent.device_name.lower() == safe_device_name.lower()),
+                None
+            )
             if not agent:
                 return jsonify({"error": "Agent not found"}), 404
             # Filter alerts for this agent
             with alerts_lock:
-                agent_alerts = [alert for alert in alerts_list if alert.get('agent_info', {}).get('device_name') == device_name]
+                agent_alerts = [
+                    alert for alert in alerts_list
+                    if alert.get('agent_info', {}).get('device_name', '').lower() == safe_device_name.lower()
+                ]
             return render_template('agent_profile.html', agent=agent, alerts=agent_alerts)
     
     @app.route('/dashboard')
