@@ -6,6 +6,10 @@ from flask import Flask, request, jsonify, render_template, url_for
 import logging
 from datetime import datetime
 from urllib.parse import unquote
+import nacl.secret
+import nacl.utils
+import ast
+import base64
 
 # --- Configuration ---
 DRAGONFLY_IP = "0.0.0.0"  # Bind to all interfaces to be accessible
@@ -21,8 +25,10 @@ logger = logging.getLogger('dragonfly')
 
 # --- Agent Class ---
 class NymphAgent:
-    def __init__(self, ip, device_name="nymph-1", os_name=None, http=True, ssh=True, ssh_port=22, http_port=80):
+    def __init__(self, ip, nacl_key, device_name="nymph-1", os_name=None, http=True, ssh=True, ssh_port=22, http_port=80):
         self.ip = ip
+        self.nacl_key = nacl_key
+        # Device name and OS name are optional, default to "nymph-1" and
         self.device_name = device_name
         self.os_name = os_name or 'unknown'
         self.last_heartbeat = None
@@ -61,6 +67,16 @@ class NymphAgent:
         except FileNotFoundError:
             logger.error(f"Log file for {self.device_name} not found.")
             open(fr'.\logs\{self.device_name}.log', 'w').close()  # Create an empty log file if it doesn't exist
+    
+    def write_key(self):
+        """Writes the Nymph agent's key to a file."""
+        try:
+            with open(fr".\pond\{self.device_name}.key", "wb") as key_file:
+                key_file.write(self.nacl_key)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to write key for {self.device_name}: {e}")
+            return False
             
     def update_heartbeat(self):
         with self.status_lock:
@@ -130,8 +146,14 @@ def global_heartbeat_listener():
             time.sleep(5)
 
 #--- Client Log Update Function ---
-def update_nymph_log(device_name, message):
+def update_nymph_log(device_name, message, nymph_nacl_key_dict):
     """Updates the log file for a specific Nymph agent."""
+    
+    with open(f".\pond\{device_name}.key", "rb") as key_file:
+        key = key_file.read()
+    
+    nacl_box = nacl.secret.SecretBox(key)
+    
     try:
         with open(fr'.\logs\{device_name}.log', 'a') as log_file:
             log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
@@ -206,26 +228,59 @@ def main():
 
     @app.route('/alert', methods=['POST'])
     def alert_handler():
-        """Receives security alerts from Nymph agents."""
-        data = request.json
-        if not data or 'alert' not in data or 'agent_info' not in data:
-            return jsonify({"error": "Invalid alert format"}), 400
+        """Receives and decrypts security alerts from Nymph agents."""
+        raw_data = request.json
+        if not raw_data or 'device_id' not in raw_data:
+            return jsonify({"error": "Invalid alert format or missing device_id"}), 400
 
+        # 1. Get the plaintext device_id to find the correct key
+        device_id = raw_data['device_id']
+
+        try:
+            # 2. Load the key using the device_id
+            with open(f"./pond/{device_id}.key", "rb") as key_file:
+                key = key_file.read()
+            nacl_box = nacl.secret.SecretBox(key)
+
+            # 3. Decode from Base64 and then decrypt *everything* first
+            encrypted_category = base64.b64decode(raw_data['category'])
+            encrypted_severity = base64.b64decode(raw_data['severity'])
+            encrypted_agent_info = base64.b64decode(raw_data['agent_info'])
+            encrypted_alert = base64.b64decode(raw_data['alert'])
+
+            # Decrypt the agent_info and alert strings
+            decrypted_agent_info_str = nacl_box.decrypt(encrypted_agent_info).decode('utf-8')
+            decrypted_alert_str = nacl_box.decrypt(encrypted_alert).decode('utf-8')
+            
+            # 4. Rebuild the final, decrypted data object
+            decrypted_data = {
+                "device_id": device_id,
+                "category": nacl_box.decrypt(encrypted_category).decode('utf-8'),
+                "severity": nacl_box.decrypt(encrypted_severity).decode('utf-8'),
+                # Safely convert the string representations back into dictionaries
+                "agent_info": ast.literal_eval(decrypted_agent_info_str),
+                "alert": ast.literal_eval(decrypted_alert_str)
+            }
+
+        except (FileNotFoundError, nacl.exceptions.CryptoError, KeyError, base64.binascii.Error) as e:
+            logger.error(f"Decryption error for device {device_id}: {e}")
+            return jsonify({"error": "Decryption failed or key not found"}), 400
+
+        # 5. Now, use the fully decrypted 'decrypted_data' object for your logic
         with alerts_lock:
-            # Add a server-side timestamp and store the alert
-            data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            alerts_list.insert(0, data) # Insert at the beginning to show newest first
-            # Keep the list from growing indefinitely
+            decrypted_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            alerts_list.insert(0, decrypted_data)
             if len(alerts_list) > 500:
                 alerts_list.pop()
         
-        logger.warning(f"ALERT RECEIVED from {data['agent_info'].get('device_name')}: {data['alert'].get('type')}")
+        # This logging will now work correctly
+        agent_name = decrypted_data['agent_info'].get('device_name', 'Unknown Device')
+        alert_type = decrypted_data['alert'].get('type', 'Unknown Type')
+        logger.warning(f"ALERT RECEIVED from {agent_name}: {alert_type}")
         
-        # Update the agent's log with the alert
-        update_nymph_log(data['agent_info'].get('device_name'),(f"Alert received: {data['alert'].get('type')} - {data['alert'].get("severity", "")} - {data['alert'].get("category", "")} - {data['alert'].get('details', '')}"))
+        update_nymph_log(agent_name, (f"Alert received: {alert_type} - {decrypted_data.get('severity', '')} - {decrypted_data.get('category', '')} - {decrypted_data['alert'].get('details', '')}"))
         
-        
-        return jsonify({"message": "Alert received"}), 200
+        return jsonify({"message": "Alert received and decrypted"}), 200
 
     @app.route('/nymph', methods=['GET', 'POST'])
     def nymph_handler():
@@ -239,7 +294,8 @@ def main():
                 if key not in nymph_agents:
                     logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
                     nymph_agent = NymphAgent(
-                        ip=data['ip'], 
+                        ip=data['ip'],
+                        nacl_key=nacl.encoding.HexEncoder.decode(data['nacl_key'].encode()),  # Generate a new key for each agent
                         device_name=data['device_name'],
                         os_name=data.get('os'),
                         ssh=data.get('ssh_service', True),
@@ -248,8 +304,12 @@ def main():
                         http_port=data.get('http_port', 80)
                     )
                     nymph_agents[key] = nymph_agent
-                    nymph_agent.start_detection_threads()
                     nymph_agent.check_log()
+                    if not nymph_agent.write_key(): # Write the key to a file
+                        return jsonify({"error": "Failed to write agent key"}), 500
+                    else:
+                        logger.info(f"Agent {data['device_name']} registered successfully.")
+                        nymph_agent.start_detection_threads()
                 else:
                     nymph_agent = nymph_agents[key]
 

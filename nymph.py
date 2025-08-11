@@ -5,7 +5,11 @@ import socket
 import platform
 import requests
 import threading
+import nacl.secret
+import nacl.utils
+import nacl.encoding
 from collections import defaultdict, deque, OrderedDict
+import base64
 
 # --- Nymph Agent Configuration ---
 # Match this with your Dragonfly server configuration
@@ -16,6 +20,11 @@ HTTP = True
 SSH = True
 SSH_PORT = 22
 HTTP_PORT = 8080 # Note: This seems to be the same as SERVER_PORT
+
+# --- Agent Encryption ---
+# Generate a random key for the SecretBox every time the agent starts
+KEY = nacl.utils.random(nacl.secret.SecretBox.KEY_SIZE)
+BOX = nacl.secret.SecretBox(KEY)
 
 # --- Security Monitor Configuration ---
 POLL_INTERVAL_SECONDS = 5
@@ -82,6 +91,7 @@ def get_device_info():
 
     return {
         "ip": client_ip,
+        "nacl_key": nacl.encoding.HexEncoder.encode(KEY).decode('utf-8'),
         "device_name": device_name,
         "os": os_name,
         "ssh_service": SSH,
@@ -106,15 +116,22 @@ def run_heartbeat(server_ip, heartbeat_port):
 
 # --- Security Monitoring Functions ---
 
-def send_alert_to_server(alert_data, device_info):
+def send_alert_to_server(alert_data, device_info, nacl_box=BOX):
+    
+    def encrypt_and_encode(data_bytes):
+        encrypted_data = nacl_box.encrypt(data_bytes)
+        return base64.b64encode(encrypted_data).decode('utf-8')
+    
     """Sends a security alert to the Dragonfly server."""
     api_url = f"http://{SERVER_IP}:{SERVER_PORT}/alert"
     payload = {
-        "category": alert_data["category"],
-        "severity": alert_data["severity"] if "severity" in alert_data else "low",
-        "agent_info": device_info,
-        "alert": alert_data
+        "device_id": device_info["device_name"],
+        "category": encrypt_and_encode(alert_data["category"].encode('utf-8')),
+        "severity": encrypt_and_encode(alert_data.get("severity", "low").encode('utf-8')),
+        "agent_info": encrypt_and_encode(str(device_info).encode('utf-8')),
+        "alert": encrypt_and_encode(str(alert_data).encode('utf-8'))
     }
+    
     try:
         # print(f"[*] Sending alert to server: {alert_data['type']}") # Uncomment for verbose logging
         requests.post(api_url, json=payload, timeout=5)
@@ -190,7 +207,7 @@ def monitor_windows_ssh(device_info):
                     }
                     
                     
-                    send_alert_to_server(alert_details, device_info)
+                    send_alert_to_server(alert_details, device_info, BOX)
 
         time.sleep(POLL_INTERVAL_SECONDS)
         
@@ -328,6 +345,7 @@ def sync_monitor(api_url, device_info, check_interval=30):
 # --- Main Execution ---
 
 def main():
+    
     """Main function to register with the server and start services."""
     print("--- Nymph Agent Initializing ---")
     device_info = get_device_info()
