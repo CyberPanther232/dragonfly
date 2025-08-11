@@ -1,0 +1,128 @@
+/* Add this to a new file named auth_style.css in your static folder */
+
+.auth-container {
+    max-width: 500px;
+    margin: 40px auto;
+    padding: 40px;
+    background-color: var(--primary-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.auth-container h2 {
+    text-align: center;
+    color: var(--primary-text);
+    font-size: 2em;
+    font-weight: 700;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.auth-subtitle {
+    text-align: center;
+    color: var(--secondary-text);
+    margin-bottom: 30px;
+}
+
+.auth-form .form-group {
+    margin-bottom: 20px;
+}
+
+.auth-form label {
+    display: block;
+    color: var(--secondary-text);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="password"],
+.auth-form input[type="email"] {
+    width: 100%;
+    padding: 12px 15px;
+    background-color: var(--secondary-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--primary-text);
+    font-size: 1em;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box; /* Important for consistent sizing */
+}
+
+.auth-form input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+}
+
+.auth-form .form-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    font-size: 0.9em;
+}
+
+.form-options .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-options a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    transition: text-decoration 0.2s;
+}
+
+.form-options a:hover {
+    text-decoration: underline;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 14px;
+    background-color: var(--accent-blue);
+    color: var(--dark-bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 1.1em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: #7bc0ff;
+    box-shadow: 0 4px 15px rgba(88, 166, 255, 0.25);
+}
+
+.auth-footer {
+    text-align: center;
+    margin-top: 30px;
+    color: var(--secondary-text);
+}
+
+.auth-footer a {
+    color: var(--accent-blue);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+.settings-container h3 {
+    color: var(--primary-text);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    margin-top: 30px;
+    margin-bottom: 20px;
+    font-size: 1.4em;
+}
+
+.settings-container form:first-of-type h3 {
+    margin-top: 0;
+}
