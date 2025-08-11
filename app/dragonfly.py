@@ -56,13 +56,12 @@ class NymphAgent:
     def check_log(self):
         """Placeholder for log checking logic."""
         try:
-            with open(f'{self.device_name}.log', 'r') as log_file:
+            with open(fr'.\logs\{self.device_name}.log', 'r') as log_file:
                 logs = log_file.readlines()
         except FileNotFoundError:
             logger.error(f"Log file for {self.device_name} not found.")
-            open(f'{self.device_name}.log', 'w').close()  # Create an empty log file if it doesn't exist
-
-
+            open(fr'.\logs\{self.device_name}.log', 'w').close()  # Create an empty log file if it doesn't exist
+            
     def update_heartbeat(self):
         with self.status_lock:
             self.status["heartbeat"] = "online"
@@ -130,9 +129,20 @@ def global_heartbeat_listener():
             logger.error(f"Heartbeat listener socket error: {e}")
             time.sleep(5)
 
+#--- Client Log Update Function ---
+def update_nymph_log(device_name, message):
+    """Updates the log file for a specific Nymph agent."""
+    try:
+        with open(fr'.\logs\{device_name}.log', 'a') as log_file:
+            log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
+    except Exception as e:
+        logger.error(f"Failed to update log for {device_name}: {e}")
+        # Ensure the log file exists
+        open(fr'.\logs\{device_name}.log', 'a').close()
+
 # --- Main Application ---
 def main():
-    logging.basicConfig(filename='dragonfly.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.basicConfig(filename=r'.\logs\dragonfly.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
     # Start the single, global heartbeat listener
     Thread(target=global_heartbeat_listener, daemon=True).start()
@@ -210,6 +220,11 @@ def main():
                 alerts_list.pop()
         
         logger.warning(f"ALERT RECEIVED from {data['agent_info'].get('device_name')}: {data['alert'].get('type')}")
+        
+        # Update the agent's log with the alert
+        update_nymph_log(data['agent_info'].get('device_name'),(f"Alert received: {data['alert'].get('type')} - {data['alert'].get("severity", "")} - {data['alert'].get("category", "")} - {data['alert'].get('details', '')}"))
+        
+        
         return jsonify({"message": "Alert received"}), 200
 
     @app.route('/nymph', methods=['GET', 'POST'])
@@ -234,6 +249,7 @@ def main():
                     )
                     nymph_agents[key] = nymph_agent
                     nymph_agent.start_detection_threads()
+                    nymph_agent.check_log()
                 else:
                     nymph_agent = nymph_agents[key]
 

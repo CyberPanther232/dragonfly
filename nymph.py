@@ -9,7 +9,7 @@ from collections import defaultdict, deque, OrderedDict
 
 # --- Nymph Agent Configuration ---
 # Match this with your Dragonfly server configuration
-SERVER_IP = "10.23.24.7"  # Change to your server's IP if needed
+SERVER_IP = "localhost"  # Change to your server's IP if needed
 SERVER_PORT = 8080
 HEARTBEAT_PORT = 9999
 HTTP = True
@@ -134,7 +134,7 @@ def check_brute_force(source_identifier, device_info):
         alert = {
             "type": "BRUTE_FORCE_ALERT",
             "source": source_identifier,
-            "count": len(failed_attempts[source_identifier]),
+            "details": f"Login attempts: {len(failed_attempts[source_identifier])}",
             "timeframe_seconds": BRUTE_FORCE_TIMEFRAME_SECONDS,
             "category": "security",
             "severity": "high"
@@ -166,6 +166,7 @@ def monitor_windows_ssh(device_info):
                     event_type = WINDOWS_EVENT_IDS[4]
                     
                     message = win32evtlogutil.SafeFormatMessage(event, "OpenSSH/Operational")
+                    print(f"[*] Processing event: {message}")
                     timestamp = event.TimeGenerated.Format()
                     category = "informational"
                     severity = "low"
