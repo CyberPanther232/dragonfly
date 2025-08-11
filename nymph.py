@@ -206,7 +206,6 @@ def monitor_windows_ssh(device_info):
                         "severity": severity
                     }
                     
-                    
                     send_alert_to_server(alert_details, device_info, BOX)
 
         time.sleep(POLL_INTERVAL_SECONDS)

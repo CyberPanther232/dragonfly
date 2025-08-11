@@ -1,42 +1,79 @@
-from threading import Thread, Lock
-import socket
-import requests
+import os
 import time
-from flask import Flask, request, jsonify, render_template, url_for
+import socket
 import logging
-from datetime import datetime
-from urllib.parse import unquote
-import nacl.secret
-import nacl.utils
 import ast
 import base64
+from threading import Thread, Lock
+from datetime import datetime
+from urllib.parse import unquote
+
+import requests
+import nacl.secret
+import nacl.utils
+from flask import Flask, request, jsonify, render_template, url_for, redirect, flash
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # --- Configuration ---
-DRAGONFLY_IP = "0.0.0.0"  # Bind to all interfaces to be accessible
+DRAGONFLY_IP = "0.0.0.0"
 DRAGONFLY_PORT = 8080
 HEARTBEAT_PORT = 9999
 
 # --- Global State ---
-nymph_agents = {}  # Key: (ip, device_name), Value: NymphAgent instance
+nymph_agents = {}
 nymph_agents_lock = Lock()
-alerts_list = [] # To store incoming alerts
+alerts_list = []
 alerts_lock = Lock()
 logger = logging.getLogger('dragonfly')
 
-# --- Agent Class ---
+# --- Flask App Initialization ---
+app = Flask(__name__)
+app.config['SECRET_KEY'] = os.urandom(24) # Use a random key for security
+
+# --- Database Configuration ---
+db_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'users.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# --- Flask-Login Configuration ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = "You must be logged in to access this page."
+login_manager.login_message_category = "info"
+
+
+# --- Database Model (Moved here from login.py) ---
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    # You might want to add an email field back here if needed for registration
+    # email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+# --- User Loader for Flask-Login ---
+@login_manager.user_loader
+def load_user(user_id):
+    """Load a user by their ID."""
+    return User.query.get(int(user_id))
+
+
+# --- Agent Class (No changes needed here) ---
 class NymphAgent:
     def __init__(self, ip, nacl_key, device_name="nymph-1", os_name=None, http=True, ssh=True, ssh_port=22, http_port=80):
         self.ip = ip
         self.nacl_key = nacl_key
-        # Device name and OS name are optional, default to "nymph-1" and
         self.device_name = device_name
         self.os_name = os_name or 'unknown'
         self.last_heartbeat = None
         self.status = {
-            "os": self.os_name,
-            "http": "unknown",
-            "ssh": "unknown",
-            "heartbeat": "unknown"
+            "os": self.os_name, "http": "unknown", "ssh": "unknown", "heartbeat": "unknown"
         }
         self.http = http
         self.ssh = ssh
@@ -47,31 +84,19 @@ class NymphAgent:
 
     def get_status(self):
         with self.status_lock:
-            # Check if heartbeat has timed out (e.g., 35 seconds)
             if self.last_heartbeat and (datetime.now() - self.last_heartbeat).total_seconds() > 35:
                 self.status["heartbeat"] = "offline"
-            
-            # Create a full dictionary to return, including non-status info
-            full_info = {
-                "ip": self.ip,
-                "device_name": self.device_name,
-                **self.status
-            }
-            return full_info
+            return {"ip": self.ip, "device_name": self.device_name, **self.status}
         
     def check_log(self):
-        """Placeholder for log checking logic."""
-        try:
-            with open(fr'.\logs\{self.device_name}.log', 'r') as log_file:
-                logs = log_file.readlines()
-        except FileNotFoundError:
-            logger.error(f"Log file for {self.device_name} not found.")
-            open(fr'.\logs\{self.device_name}.log', 'w').close()  # Create an empty log file if it doesn't exist
+        log_path = os.path.join('.', 'logs', f'{self.device_name}.log')
+        if not os.path.exists(log_path):
+            open(log_path, 'w').close()
     
     def write_key(self):
-        """Writes the Nymph agent's key to a file."""
+        key_path = os.path.join('.', 'pond', f'{self.device_name}.key')
         try:
-            with open(fr".\pond\{self.device_name}.key", "wb") as key_file:
+            with open(key_path, "wb") as key_file:
                 key_file.write(self.nacl_key)
             return True
         except Exception as e:
@@ -84,41 +109,32 @@ class NymphAgent:
             self.last_heartbeat = datetime.now()
 
     def start_detection_threads(self):
-        if self.threads_started:
-            return
+        if self.threads_started: return
         self.threads_started = True
+        if self.http: Thread(target=self._httpecho, daemon=True).start()
+        if self.ssh: Thread(target=self._sshdetect, daemon=True).start()
 
-        # --- Service Check Threads ---
-        def httpecho():
-            while True:
-                try:
-                    requests.get(f"http://{self.ip}:{self.http_port}/", timeout=5)
-                    with self.status_lock:
-                        self.status["http"] = "online"
-                except requests.RequestException:
-                    with self.status_lock:
-                        self.status["http"] = "offline"
-                time.sleep(30) # Check every 30 seconds
+    def _httpecho(self):
+        while True:
+            try:
+                requests.get(f"http://{self.ip}:{self.http_port}/", timeout=5)
+                with self.status_lock: self.status["http"] = "online"
+            except requests.RequestException:
+                with self.status_lock: self.status["http"] = "offline"
+            time.sleep(30)
 
-        def sshdetect():
-            while True:
-                try:
-                    with socket.create_connection((self.ip, self.ssh_port), timeout=5):
-                        with self.status_lock:
-                            self.status["ssh"] = "online"
-                except (socket.timeout, ConnectionRefusedError, OSError):
-                    with self.status_lock:
-                        self.status["ssh"] = "offline"
-                time.sleep(30) # Check every 30 seconds
-        
-        if self.http:
-            Thread(target=httpecho, daemon=True).start()
-        if self.ssh:
-            Thread(target=sshdetect, daemon=True).start()
+    def _sshdetect(self):
+        while True:
+            try:
+                with socket.create_connection((self.ip, self.ssh_port), timeout=5):
+                    with self.status_lock: self.status["ssh"] = "online"
+            except (socket.timeout, ConnectionRefusedError, OSError):
+                with self.status_lock: self.status["ssh"] = "offline"
+            time.sleep(30)
 
-# --- Centralized Heartbeat Listener ---
+
+# --- Background Threads (No changes needed) ---
 def global_heartbeat_listener():
-    """A single listener to handle heartbeats from all agents."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.bind((DRAGONFLY_IP, HEARTBEAT_PORT))
@@ -126,208 +142,202 @@ def global_heartbeat_listener():
     except socket.error as e:
         logger.error(f"FATAL: Could not bind heartbeat listener socket: {e}")
         return
-
     while True:
         try:
             data, addr = sock.recvfrom(1024)
-            ip_from, _ = addr
-            
             if data == b'heartbeat':
                 with nymph_agents_lock:
-                    # Find which agent this heartbeat belongs to
                     for agent in nymph_agents.values():
-                        if agent.ip == ip_from:
+                        if agent.ip == addr[0]:
                             agent.update_heartbeat()
-                            # logger.info(f"Heartbeat received from {agent.device_name} at {ip_from}")
                             sock.sendto(b'ack', addr)
                             break
         except socket.error as e:
             logger.error(f"Heartbeat listener socket error: {e}")
             time.sleep(5)
 
-#--- Client Log Update Function ---
-def update_nymph_log(device_name, message, nymph_nacl_key_dict):
-    """Updates the log file for a specific Nymph agent."""
-    
-    with open(f".\pond\{device_name}.key", "rb") as key_file:
-        key = key_file.read()
-    
-    nacl_box = nacl.secret.SecretBox(key)
-    
+def update_nymph_log(device_name, message):
+    log_path = os.path.join('.', 'logs', f'{device_name}.log')
     try:
-        with open(fr'.\logs\{device_name}.log', 'a') as log_file:
+        with open(log_path, 'a') as log_file:
             log_file.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {message}\n")
     except Exception as e:
         logger.error(f"Failed to update log for {device_name}: {e}")
-        # Ensure the log file exists
-        open(fr'.\logs\{device_name}.log', 'a').close()
 
-# --- Main Application ---
+
+# --- Authentication Routes (Corrected Logic) ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user, remember=True)
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid username or password.', 'error')
+    return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return redirect(url_for('register'))
+
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists.', 'error')
+            return redirect(url_for('register'))
+
+        hashed_password = generate_password_hash(password, method='pbkdf2:sha256')
+        new_user = User(username=username, password_hash=hashed_password)
+        db.session.add(new_user)
+        db.session.commit()
+
+        flash('Account created successfully! Please log in.', 'success')
+        return redirect(url_for('login'))
+    return render_template('register.html')
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route("/settings")
+@login_required
+def settings():
+    # This route now correctly renders the settings page.
+    # Add POST logic here if you want to handle form submissions (e.g., password change).
+    return render_template('settings.html')
+
+
+# --- Core Application Routes (Protected) ---
+@app.route('/')
+@login_required
+def index():
+    return redirect(url_for('dashboard'))
+
+@app.route("/agent-profile/<device_name>")
+@login_required
+def agent_profile(device_name):
+    safe_device_name = unquote(device_name)
+    with nymph_agents_lock:
+        agent = next((a for a in nymph_agents.values() if a.device_name.lower() == safe_device_name.lower()), None)
+    if not agent:
+        return jsonify({"error": "Agent not found"}), 404
+    with alerts_lock:
+        agent_alerts = [a for a in alerts_list if a.get('agent_info', {}).get('device_name', '').lower() == safe_device_name.lower()]
+    return render_template('agent_profile.html', agent=agent.get_status(), alerts=agent_alerts)
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    return render_template('dashboard.html')
+
+@app.route('/nymph_agents')
+@login_required
+def nymph_agents_view():
+    return render_template('nymph_agents.html')
+
+
+# --- API Routes (Unprotected, as they are for agents) ---
+@app.route('/api/agents')
+def get_agents_api():
+    with nymph_agents_lock:
+        return jsonify([agent.get_status() for agent in nymph_agents.values()])
+
+@app.route('/api/alerts')
+def get_alerts_api():
+    with alerts_lock:
+        return jsonify({"active": alerts_list, "history": []})
+
+@app.route('/alert', methods=['POST'])
+def alert_handler():
+    raw_data = request.json
+    if not raw_data or 'device_id' not in raw_data:
+        return jsonify({"error": "Invalid alert format"}), 400
+    device_id = raw_data['device_id']
+    key_path = os.path.join('.', 'pond', f'{device_id}.key')
+    try:
+        with open(key_path, "rb") as key_file: key = key_file.read()
+        nacl_box = nacl.secret.SecretBox(key)
+        decrypted_data = {
+            "device_id": device_id,
+            "category": nacl_box.decrypt(base64.b64decode(raw_data['category'])).decode('utf-8'),
+            "severity": nacl_box.decrypt(base64.b64decode(raw_data['severity'])).decode('utf-8'),
+            "agent_info": ast.literal_eval(nacl_box.decrypt(base64.b64decode(raw_data['agent_info'])).decode('utf-8')),
+            "alert": ast.literal_eval(nacl_box.decrypt(base64.b64decode(raw_data['alert'])).decode('utf-8'))
+        }
+    except Exception as e:
+        logger.error(f"Decryption error for device {device_id}: {e}")
+        return jsonify({"error": "Decryption failed or key not found"}), 400
+    
+    with alerts_lock:
+        decrypted_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        alerts_list.insert(0, decrypted_data)
+        if len(alerts_list) > 500: alerts_list.pop()
+    
+    agent_name = decrypted_data['agent_info'].get('device_name', 'Unknown')
+    alert_type = decrypted_data['alert'].get('type', 'Unknown')
+    logger.warning(f"ALERT RECEIVED from {agent_name}: {alert_type}")
+    update_nymph_log(agent_name, f"Alert received: {alert_type}")
+    return jsonify({"message": "Alert received"}), 200
+
+@app.route('/nymph', methods=['GET', 'POST'])
+def nymph_handler():
+    if request.method == 'POST':
+        data = request.json
+        if not data or 'ip' not in data or 'device_name' not in data:
+            return jsonify({"error": "Invalid request"}), 400
+        key = (data['ip'], data['device_name'])
+        with nymph_agents_lock:
+            if key not in nymph_agents:
+                logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
+                nymph_agent = NymphAgent(ip=data['ip'], nacl_key=nacl.encoding.HexEncoder.decode(data['nacl_key'].encode()), **data)
+                nymph_agents[key] = nymph_agent
+                nymph_agent.check_log()
+                if not nymph_agent.write_key(): return jsonify({"error": "Failed to write key"}), 500
+                nymph_agent.start_detection_threads()
+            return jsonify({"message": "Nymph agent processed", "status": nymph_agents[key].get_status()}), 200
+    elif request.method == 'GET':
+        ip, device_name = request.args.get('ip'), request.args.get('device_name')
+        if not ip or not device_name: return jsonify({"error": "Missing params"}), 400
+        key = (ip, device_name)
+        with nymph_agents_lock:
+            return jsonify({"status": nymph_agents[key].get_status()}) if key in nymph_agents else ({"error": "Agent not registered"}, 404)
+
+# --- Database Initialization Command ---
+@app.cli.command("init-db")
+def init_db_command():
+    """Clears existing data and creates new tables."""
+    db.create_all()
+    print("Initialized the database.")
+
+# --- Main Execution ---
 def main():
-    logging.basicConfig(filename=r'.\logs\dragonfly.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    log_dir = os.path.join('.', 'logs')
+    pond_dir = os.path.join('.', 'pond')
+    if not os.path.exists(log_dir): os.makedirs(log_dir)
+    if not os.path.exists(pond_dir): os.makedirs(pond_dir)
     
-    # Start the single, global heartbeat listener
+    logging.basicConfig(filename=os.path.join(log_dir, 'dragonfly.log'), level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    
     Thread(target=global_heartbeat_listener, daemon=True).start()
-
-    app = Flask(__name__)
-
-    @app.route('/')
-    def index():
-        """Serves the main dashboard page."""
-        return render_template('dashboard.html')
     
-    @app.route("/logout")
-    def logout():
-        """Handles user logout."""
-        return jsonify({"message": "Logged out successfully"}), 200
-    
-    @app.route("/agent-profile/<device_name>")
-    def agent_profile(device_name):
-        """Serves the agent profile page for a specific device."""
-        safe_device_name = unquote(device_name)
-        with nymph_agents_lock:
-            agent = next(
-                (agent for agent in nymph_agents.values() if agent.device_name.lower() == safe_device_name.lower()),
-                None
-            )
-            if not agent:
-                return jsonify({"error": "Agent not found"}), 404
-            # Filter alerts for this agent
-            with alerts_lock:
-                agent_alerts = [
-                    alert for alert in alerts_list
-                    if alert.get('agent_info', {}).get('device_name', '').lower() == safe_device_name.lower()
-                ]
-            # Pass agent.get_status() so the template can use dict-style access
-            return render_template('agent_profile.html', agent=agent.get_status(), alerts=agent_alerts)
-    
-    @app.route('/dashboard')
-    def dashboard():
-        """Serves the dashboard page with agent status."""
-        return render_template('dashboard.html')
-
-    @app.route('/nymph_agents')
-    def nymph_agents_view():
-        """Displays the list of registered Nymph agents."""
-        return render_template('nymph_agents.html')
-
-    # --- API Routes ---
-    @app.route('/api/agents')
-    def get_agents_api():
-        """Provides the status of all agents as JSON."""
-        with nymph_agents_lock:
-            agents_list = [agent.get_status() for agent in nymph_agents.values()]
-        return jsonify(agents_list)
-
-    @app.route('/api/alerts')
-    def get_alerts_api():
-        """Provides the list of alerts as JSON for the frontend."""
-        with alerts_lock:
-            # The JS expects 'active', for now, we send all alerts
-            return jsonify({"active": alerts_list, "history": []})
-
-    @app.route('/alert', methods=['POST'])
-    def alert_handler():
-        """Receives and decrypts security alerts from Nymph agents."""
-        raw_data = request.json
-        if not raw_data or 'device_id' not in raw_data:
-            return jsonify({"error": "Invalid alert format or missing device_id"}), 400
-
-        # 1. Get the plaintext device_id to find the correct key
-        device_id = raw_data['device_id']
-
-        try:
-            # 2. Load the key using the device_id
-            with open(f"./pond/{device_id}.key", "rb") as key_file:
-                key = key_file.read()
-            nacl_box = nacl.secret.SecretBox(key)
-
-            # 3. Decode from Base64 and then decrypt *everything* first
-            encrypted_category = base64.b64decode(raw_data['category'])
-            encrypted_severity = base64.b64decode(raw_data['severity'])
-            encrypted_agent_info = base64.b64decode(raw_data['agent_info'])
-            encrypted_alert = base64.b64decode(raw_data['alert'])
-
-            # Decrypt the agent_info and alert strings
-            decrypted_agent_info_str = nacl_box.decrypt(encrypted_agent_info).decode('utf-8')
-            decrypted_alert_str = nacl_box.decrypt(encrypted_alert).decode('utf-8')
-            
-            # 4. Rebuild the final, decrypted data object
-            decrypted_data = {
-                "device_id": device_id,
-                "category": nacl_box.decrypt(encrypted_category).decode('utf-8'),
-                "severity": nacl_box.decrypt(encrypted_severity).decode('utf-8'),
-                # Safely convert the string representations back into dictionaries
-                "agent_info": ast.literal_eval(decrypted_agent_info_str),
-                "alert": ast.literal_eval(decrypted_alert_str)
-            }
-
-        except (FileNotFoundError, nacl.exceptions.CryptoError, KeyError, base64.binascii.Error) as e:
-            logger.error(f"Decryption error for device {device_id}: {e}")
-            return jsonify({"error": "Decryption failed or key not found"}), 400
-
-        # 5. Now, use the fully decrypted 'decrypted_data' object for your logic
-        with alerts_lock:
-            decrypted_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            alerts_list.insert(0, decrypted_data)
-            if len(alerts_list) > 500:
-                alerts_list.pop()
-        
-        # This logging will now work correctly
-        agent_name = decrypted_data['agent_info'].get('device_name', 'Unknown Device')
-        alert_type = decrypted_data['alert'].get('type', 'Unknown Type')
-        logger.warning(f"ALERT RECEIVED from {agent_name}: {alert_type}")
-        
-        update_nymph_log(agent_name, (f"Alert received: {alert_type} - {decrypted_data.get('severity', '')} - {decrypted_data.get('category', '')} - {decrypted_data['alert'].get('details', '')}"))
-        
-        return jsonify({"message": "Alert received and decrypted"}), 200
-
-    @app.route('/nymph', methods=['GET', 'POST'])
-    def nymph_handler():
-        if request.method == 'POST':
-            data = request.json
-            if not data or 'ip' not in data or 'device_name' not in data:
-                return jsonify({"error": "Invalid request, 'ip' and 'device_name' are required"}), 400
-
-            key = (data['ip'], data['device_name'])
-            with nymph_agents_lock:
-                if key not in nymph_agents:
-                    logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
-                    nymph_agent = NymphAgent(
-                        ip=data['ip'],
-                        nacl_key=nacl.encoding.HexEncoder.decode(data['nacl_key'].encode()),  # Generate a new key for each agent
-                        device_name=data['device_name'],
-                        os_name=data.get('os'),
-                        ssh=data.get('ssh_service', True),
-                        ssh_port=data.get('ssh_port', 22),
-                        http=data.get('http_service', True),
-                        http_port=data.get('http_port', 80)
-                    )
-                    nymph_agents[key] = nymph_agent
-                    nymph_agent.check_log()
-                    if not nymph_agent.write_key(): # Write the key to a file
-                        return jsonify({"error": "Failed to write agent key"}), 500
-                    else:
-                        logger.info(f"Agent {data['device_name']} registered successfully.")
-                        nymph_agent.start_detection_threads()
-                else:
-                    nymph_agent = nymph_agents[key]
-
-            return jsonify({"message": "Nymph agent processed", "status": nymph_agent.get_status()}), 200
-
-        # --- GET logic for sync check ---
-        elif request.method == 'GET':
-            ip = request.args.get('ip')
-            device_name = request.args.get('device_name')
-            if not ip or not device_name:
-                return jsonify({"error": "Missing 'ip' or 'device_name' in query parameters"}), 400
-            key = (ip, device_name)
-            with nymph_agents_lock:
-                if key in nymph_agents:
-                    return jsonify({"message": "Agent is registered", "status": nymph_agents[key].get_status()}), 200
-                else:
-                    return jsonify({"error": "Agent not registered"}), 404
-
+    print(f"Dragonfly server starting on http://{DRAGONFLY_IP}:{DRAGONFLY_PORT}")
     app.run(host=DRAGONFLY_IP, port=DRAGONFLY_PORT, debug=False)
 
 if __name__ == "__main__":
