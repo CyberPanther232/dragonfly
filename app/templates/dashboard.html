@@ -1,3 +1,4 @@
+<!-- dashboard.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
     <!-- Add Chart.js library -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
 
@@ -19,6 +21,7 @@
         <ul>
             <li><a href="{{ url_for('dashboard') }}" class="active">Alerts Dashboard</a></li>
             <li><a href="{{ url_for('nymph_agents_view') }}">Agents List</a></li>
+            <li><a href="{{ url_for('settings')}}">Settings</a></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
         </ul>
     </nav>
@@ -28,6 +31,20 @@
         <section>
             <h2>Dashboard Overview</h2>
             <div class="dashboard-grid">
+                <!-- Top Row Visualizations -->
+                <div class="count-box-container">
+                    <div class="count-box-header">
+                        <h3>Event Counts</h3>
+                        <select id="count-criteria-selector">
+                            <option value="severity">By Severity</option>
+                            <option value="category">By Category</option>
+                            <option value="agent">By Agent</option>
+                        </select>
+                    </div>
+                    <div id="count-box-display" class="count-box-display">
+                        <!-- Counts will be dynamically inserted here -->
+                    </div>
+                </div>
                 <div class="chart-container">
                     <h3>Alerts by Type</h3>
                     <canvas id="alertsByTypeChart"></canvas>
@@ -36,13 +53,18 @@
                     <h3>Alerts by Agent</h3>
                     <canvas id="alertsByAgentChart"></canvas>
                 </div>
+
+                <!-- Bottom Row Visualization (Full Width) -->
+                <div class="chart-container full-width">
+                    <h3>Alerts Over Time (Last 24 Hours)</h3>
+                    <canvas id="alertsOverTimeChart"></canvas>
+                </div>
             </div>
         </section>
 
         <!-- Live Alerts Section -->
         <section>
             <h2>Live Security Alerts</h2>
-            <!-- New panel to contain filters and the scrollable list -->
             <div class="live-alerts-panel">
                 <div class="filter-controls">
                     <input type="text" id="filter-text" placeholder="Filter by details, IP, or device name...">
@@ -60,6 +82,7 @@
     
     <footer>
         <p>Dashboard refreshes every 15 seconds. Last updated: <span id="last-updated">Never</span></p>
+        <p>&copy; 2025 Dragonfly SIEM - CyberPanther-Development</p>
     </footer>
 
     <!-- Reference the dashboard.js script -->

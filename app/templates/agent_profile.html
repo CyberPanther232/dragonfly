@@ -119,6 +119,7 @@
         <ul>
             <li><a href="{{ url_for('dashboard') }}">Alerts Dashboard</a></li>
             <li><a href="{{ url_for('nymph_agents_view') }}" class="active">Agents List</a></li>
+            <li><a href="{{ url_for('settings')}}">Settings</a></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
         </ul>
     </nav>
@@ -174,5 +175,8 @@
         </div>
         <a class="back-link" href="{{ url_for('nymph_agents_view') }}">&larr; Back to Agents List</a>
     </main>
+    <footer>
+        <p>&copy; 2025 Dragonfly SIEM - CyberPanther-Development</p>
+    </footer>
 </body>
 </html>

@@ -1,17 +1,21 @@
+// dashboard.js
 document.addEventListener('DOMContentLoaded', function () {
     // --- DOM Elements ---
     const alertsList = document.getElementById('alerts-list');
     const lastUpdated = document.getElementById('last-updated');
     const filterText = document.getElementById('filter-text');
     const filterType = document.getElementById('filter-type');
+    const countCriteriaSelector = document.getElementById('count-criteria-selector');
+    const countBoxDisplay = document.getElementById('count-box-display');
     
     // --- Chart Contexts ---
     const alertsByTypeCtx = document.getElementById('alertsByTypeChart')?.getContext('2d');
     const alertsByAgentCtx = document.getElementById('alertsByAgentChart')?.getContext('2d');
+    const alertsOverTimeCtx = document.getElementById('alertsOverTimeChart')?.getContext('2d');
 
     // --- State ---
     let allAlerts = [];
-    let alertTypeChart, alertsByAgentChart;
+    let alertTypeChart, alertsByAgentChart, alertsOverTimeChart;
 
     // --- SVG Icons ---
     const ICONS = {
@@ -30,9 +34,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const data = await response.json();
             allAlerts = data.active || [];
             
-            // Update all parts of the dashboard
             renderFilteredAlerts();
             updateCharts();
+            updateCountBox();
             populateFilterOptions();
             updateTimestamp();
 
@@ -47,21 +51,14 @@ document.addEventListener('DOMContentLoaded', function () {
      */
     function renderFilteredAlerts() {
         if (!alertsList) return;
-
         const textValue = filterText.value.toLowerCase();
         const typeValue = filterType.value;
-
         const filteredAlerts = allAlerts.filter(fullAlert => {
-            const alert = fullAlert.alert;
-            const agent = fullAlert.agent_info;
-
+            const { alert, agent_info } = fullAlert;
             const matchesType = !typeValue || alert.type === typeValue;
             const matchesText = !textValue || 
-                (alert.log_entry && alert.log_entry.toLowerCase().includes(textValue)) ||
-                (alert.details && alert.details.join(',').toLowerCase().includes(textValue)) ||
-                (agent.device_name && agent.device_name.toLowerCase().includes(textValue)) ||
-                (agent.ip && agent.ip.toLowerCase().includes(textValue));
-
+                Object.values(alert).some(val => String(val).toLowerCase().includes(textValue)) ||
+                Object.values(agent_info).some(val => String(val).toLowerCase().includes(textValue));
             return matchesType && matchesText;
         });
 
@@ -73,12 +70,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     /**
-     * Updates the charts with the latest data
+     * Updates all charts with the latest data
      */
     function updateCharts() {
-        if (!alertsByTypeCtx || !alertsByAgentCtx) return;
+        if (!alertsByTypeCtx || !alertsByAgentCtx || !alertsOverTimeCtx) return;
 
-        // --- Process data for charts ---
         const alertsByTypeData = allAlerts.reduce((acc, {alert}) => {
             acc[alert.type] = (acc[alert.type] || 0) + 1;
             return acc;
@@ -89,57 +85,122 @@ document.addEventListener('DOMContentLoaded', function () {
             return acc;
         }, {});
 
+        // --- Data processing for Alerts Over Time ---
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        const hourlyAlerts = Array(24).fill(0);
+        const labels = Array(24).fill().map((_, i) => {
+            const date = new Date(now.getTime() - (23 - i) * 60 * 60 * 1000);
+            return date;
+        });
+
+        allAlerts.forEach(({ timestamp }) => {
+            const alertDate = new Date(timestamp.replace(' ', 'T') + 'Z'); // Make ISO compatible
+            if (alertDate >= twentyFourHoursAgo) {
+                const hourIndex = Math.floor((alertDate - twentyFourHoursAgo) / (1000 * 60 * 60));
+                if(hourIndex >= 0 && hourIndex < 24) {
+                    hourlyAlerts[hourIndex]++;
+                }
+            }
+        });
+
+
         // --- Chart Configurations ---
-        const chartOptions = {
+        const barChartOptions = {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#E0E1DD' } } },
+            plugins: { legend: { display: false } },
             scales: { 
                 y: { ticks: { color: '#a8b2c5' }, grid: { color: 'rgba(168, 178, 197, 0.2)' } },
                 x: { ticks: { color: '#a8b2c5' }, grid: { color: 'rgba(168, 178, 197, 0.2)' } }
             }
         };
 
-        // --- Update or create "Alerts by Type" chart ---
-        if (alertTypeChart) {
-            alertTypeChart.data.labels = Object.keys(alertsByTypeData);
-            alertTypeChart.data.datasets[0].data = Object.values(alertsByTypeData);
-            alertTypeChart.update();
-        } else {
-            alertTypeChart = new Chart(alertsByTypeCtx, {
-                type: 'bar',
-                data: {
-                    labels: Object.keys(alertsByTypeData),
-                    datasets: [{
-                        label: 'Alert Count',
-                        data: Object.values(alertsByTypeData),
-                        backgroundColor: 'rgba(88, 166, 255, 0.6)',
-                        borderColor: 'rgba(88, 166, 255, 1)',
-                        borderWidth: 1
-                    }]
+        const doughnutChartOptions = {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: { legend: { position: 'top', labels: { color: '#E0E1DD' } } },
+        };
+
+        const lineChartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { 
+                    ticks: { color: '#a8b2c5', precision: 0 }, 
+                    grid: { color: 'rgba(168, 178, 197, 0.2)' },
+                    beginAtZero: true
                 },
-                options: chartOptions
-            });
+                x: { 
+                    type: 'time',
+                    time: { unit: 'hour', displayFormats: { hour: 'ha' } },
+                    ticks: { color: '#a8b2c5' }, 
+                    grid: { color: 'rgba(168, 178, 197, 0.2)' }
+                }
+            },
+            elements: { line: { tension: 0.3 } }
+        };
+
+        // --- Update or create charts ---
+        updateOrCreateChart(alertTypeChart, alertsByTypeCtx, 'bar', {
+            labels: Object.keys(alertsByTypeData),
+            datasets: [{ label: 'Alert Count', data: Object.values(alertsByTypeData), backgroundColor: 'rgba(88, 166, 255, 0.6)' }]
+        }, barChartOptions, 'alertTypeChart');
+
+        updateOrCreateChart(alertsByAgentChart, alertsByAgentCtx, 'doughnut', {
+            labels: Object.keys(alertsByAgentData),
+            datasets: [{ data: Object.values(alertsByAgentData), backgroundColor: ['#58A6FF', '#3FB950', '#F85149', '#ffc107', '#6f42c1'], borderWidth: 2, borderColor: '#1B263B' }]
+        }, doughnutChartOptions, 'alertsByAgentChart');
+
+        updateOrCreateChart(alertsOverTimeChart, alertsOverTimeCtx, 'line', {
+            labels: labels,
+            datasets: [{ label: 'Alerts', data: hourlyAlerts, backgroundColor: 'rgba(88, 166, 255, 0.2)', borderColor: 'rgba(88, 166, 255, 1)', fill: true }]
+        }, lineChartOptions, 'alertsOverTimeChart');
+    }
+
+    function updateOrCreateChart(chartInstance, context, type, data, options, chartName) {
+        if (chartInstance) {
+            chartInstance.data = data;
+            chartInstance.options = options;
+            chartInstance.update();
+        } else {
+            window[chartName] = new Chart(context, { type, data, options });
+        }
+    }
+
+
+    /**
+     * Updates the count box based on the selected criteria
+     */
+    function updateCountBox() {
+        if (!countBoxDisplay || !countCriteriaSelector) return;
+        const criteria = countCriteriaSelector.value;
+        let counts = {};
+
+        if (criteria === 'severity') {
+            counts = allAlerts.reduce((acc, { severity }) => {
+                acc[severity || 'unknown'] = (acc[severity || 'unknown'] || 0) + 1;
+                return acc;
+            }, {});
+        } else if (criteria === 'category') {
+            counts = allAlerts.reduce((acc, { category }) => {
+                acc[category || 'unknown'] = (acc[category || 'unknown'] || 0) + 1;
+                return acc;
+            }, {});
+        } else if (criteria === 'agent') {
+            counts = allAlerts.reduce((acc, { agent_info }) => {
+                acc[agent_info.device_name || 'unknown'] = (acc[agent_info.device_name || 'unknown'] || 0) + 1;
+                return acc;
+            }, {});
         }
 
-        // --- Update or create "Alerts by Agent" chart ---
-        if (alertsByAgentChart) {
-            alertsByAgentChart.data.labels = Object.keys(alertsByAgentData);
-            alertsByAgentChart.data.datasets[0].data = Object.values(alertsByAgentData);
-            alertsByAgentChart.update();
-        } else {
-            alertsByAgentChart = new Chart(alertsByAgentCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(alertsByAgentData),
-                    datasets: [{
-                        data: Object.values(alertsByAgentData),
-                        backgroundColor: ['#58A6FF', '#3FB950', '#F85149', '#ffc107', '#6f42c1', '#fd7e14'],
-                    }]
-                },
-                options: { ...chartOptions, scales: {} }
-            });
-        }
+        countBoxDisplay.innerHTML = Object.entries(counts).map(([label, value]) => `
+            <div class="count-item">
+                <span class="count-value">${value}</span>
+                <span class="count-label">${label}</span>
+            </div>
+        `).join('') || '<div class="alert alert-info" style="width: 100%;"><strong>No data for this criteria.</strong></div>';
     }
 
     /**
@@ -163,21 +224,21 @@ document.addEventListener('DOMContentLoaded', function () {
      * Creates the HTML for a single alert card
      */
     function formatAlertCard(fullAlert) {
-        const { agent_info, alert, timestamp } = fullAlert;
+        const { agent_info, alert, severity, category, timestamp } = fullAlert;
         const escape = (str) => String(str).replace(/[&<>"']/g, (m) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[m]);
-        let alertClass = 'alert-warning', icon = ICONS.WARNING, detailsHtml = '';
+        let alertClass = 'alert-info', icon = ICONS.WARNING;
 
-        if (alert.log_entry) detailsHtml = `<strong>Details:</strong> <code>${escape(alert.log_entry)}</code>`;
-        else if (alert.details) detailsHtml = `<strong>Details:</strong> ${escape(alert.details.join(', '))}`;
-        
-        if (alert.type === 'BRUTE_FORCE_ALERT') {
-            alertClass = 'alert-danger'; icon = ICONS.DANGER;
-            detailsHtml = `<strong>Source:</strong> ${escape(alert.source)}<br><strong>Count:</strong> ${escape(alert.count)} attempts in ${escape(alert.timeframe_seconds)}s`;
-        } else if (alert.type?.startsWith('SUCCESSFUL')) {
-            alertClass = 'alert-success'; icon = ICONS.SUCCESS;
-        } else if (alert.type?.startsWith('FAILED') || alert.type?.startsWith('INVALID')) {
-            alertClass = 'alert-danger'; icon = ICONS.DANGER;
+        switch (severity?.toLowerCase()) {
+            case 'high':
+            case 'critical':
+                alertClass = 'alert-danger'; icon = ICONS.DANGER; break;
+            case 'medium':
+                alertClass = 'alert-warning'; icon = ICONS.WARNING; break;
+            case 'low':
+                alertClass = 'alert-success'; icon = ICONS.SUCCESS; break;
         }
+
+        const detailsHtml = alert.log_entry ? `<strong>Details:</strong> <code>${escape(alert.log_entry)}</code>` : '';
 
         return `
             <div class="alert ${alertClass}">
@@ -188,7 +249,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         <span class="alert-timestamp">${escape(timestamp)}</span>
                     </div>
                     <div class="alert-body">
-                        <strong>Type:</strong> ${escape(alert.type || 'N/A')}<br>
+                        <strong>Type:</strong> ${escape(alert.type || 'N/A')} | 
+                        <strong>Category:</strong> ${escape(category || 'N/A')} | 
+                        <strong>Severity:</strong> ${escape(severity || 'N/A')}<br>
                         ${detailsHtml}
                     </div>
                 </div>
@@ -202,8 +265,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Event Listeners ---
     filterText.addEventListener('input', renderFilteredAlerts);
     filterType.addEventListener('change', renderFilteredAlerts);
+    countCriteriaSelector.addEventListener('change', updateCountBox);
 
     // --- Initial Load & Refresh Interval ---
     updateDashboard();
-    setInterval(updateDashboard, 15000); // Refresh every 15 seconds
+    setInterval(updateDashboard, 15000);
 });

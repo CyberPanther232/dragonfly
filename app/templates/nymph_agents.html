@@ -17,6 +17,7 @@
         <ul>
             <li><a href="{{ url_for('dashboard') }}">Alerts Dashboard</a></li>
             <li><a href="{{ url_for('nymph_agents_view') }}" class="active">Agents List</a></li>
+            <li><a href="{{ url_for('settings')}}">Settings</a></li>
             <li><a href="{{ url_for('logout') }}">Logout</a></li>
         </ul>
     </nav>
@@ -33,6 +34,7 @@
     
     <footer>
         <p>Agent list refreshes every 10 seconds. Last updated: <span id="last-updated">Never</span></p>
+        <p>&copy; 2025 Dragonfly SIEM - CyberPanther-Development</p>
     </footer>
 
     <!-- Reference the updated list_agents.js script -->

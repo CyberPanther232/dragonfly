@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Settings - Dragonfly</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='auth_style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -15,7 +14,6 @@
     </header>
     <nav class="navbar">
         <ul>
-            <li><a href="{{ url_for('index') }}">Home</a></li>
             <li><a href="{{ url_for('dashboard') }}">Alerts Dashboard</a></li>
             <li><a href="{{ url_for('nymph_agents_view') }}">Agents List</a></li>
             <li><a href="{{ url_for('settings') }}" class="active">Settings</a></li>

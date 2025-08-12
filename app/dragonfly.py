@@ -292,8 +292,8 @@ def alert_handler():
     
     agent_name = decrypted_data['agent_info'].get('device_name', 'Unknown')
     alert_type = decrypted_data['alert'].get('type', 'Unknown')
-    logger.warning(f"ALERT RECEIVED from {agent_name}: {alert_type}")
-    update_nymph_log(agent_name, f"Alert received: {alert_type}")
+    logger.warning(f"ALERT RECEIVED from {agent_name}: {f"{decrypted_data['category']} - {decrypted_data['severity']} - {decrypted_data['alert'].get('type', '')}"}")
+    update_nymph_log(agent_name, f"Alert received: {f"{decrypted_data['category']} - {decrypted_data['severity']} - {decrypted_data['alert'].get('type', '')}"}")
     return jsonify({"message": "Alert received"}), 200
 
 @app.route('/nymph', methods=['GET', 'POST'])
@@ -306,7 +306,29 @@ def nymph_handler():
         with nymph_agents_lock:
             if key not in nymph_agents:
                 logger.info(f"Registering new agent: {data['device_name']} at {data['ip']}")
-                nymph_agent = NymphAgent(ip=data['ip'], nacl_key=nacl.encoding.HexEncoder.decode(data['nacl_key'].encode()), **data)
+                
+                # --- FIX START ---
+                # Prepare arguments for the constructor to prevent TypeError
+                init_kwargs = data.copy()
+                
+                # Pop nacl_key to handle it separately after decoding
+                nacl_key_hex = init_kwargs.pop('nacl_key')
+                
+                # Map agent data keys to constructor argument names if they differ
+                if 'os' in init_kwargs:
+                    init_kwargs['os_name'] = init_kwargs.pop('os')
+                if 'http_service' in init_kwargs:
+                    init_kwargs['http'] = init_kwargs.pop('http_service')
+                if 'ssh_service' in init_kwargs:
+                    init_kwargs['ssh'] = init_kwargs.pop('ssh_service')
+
+                # Instantiate the agent. 'ip', 'device_name', etc., are passed via **init_kwargs
+                nymph_agent = NymphAgent(
+                    nacl_key=nacl.encoding.HexEncoder.decode(nacl_key_hex.encode()),
+                    **init_kwargs
+                )
+                # --- FIX END ---
+                
                 nymph_agents[key] = nymph_agent
                 nymph_agent.check_log()
                 if not nymph_agent.write_key(): return jsonify({"error": "Failed to write key"}), 500
@@ -318,6 +340,7 @@ def nymph_handler():
         key = (ip, device_name)
         with nymph_agents_lock:
             return jsonify({"status": nymph_agents[key].get_status()}) if key in nymph_agents else ({"error": "Agent not registered"}, 404)
+
 
 # --- Database Initialization Command ---
 @app.cli.command("init-db")

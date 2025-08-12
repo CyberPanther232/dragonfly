@@ -1,3 +1,4 @@
+/* style.css */
 /* --- Global Styles & Color Palette --- */
 :root {
     --dark-bg: #121828;
@@ -105,19 +106,23 @@ section h2 {
 /* --- Dashboard & Chart Styles --- */
 .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
     gap: 30px;
     margin-bottom: 40px;
 }
 
 .chart-container {
     background-color: var(--primary-card-bg);
-    padding: 60px;
+    padding: 25px;
     border-radius: 12px;
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    height: 450px; /* Crucial: Constrains the height of the chart's container */
-    position: relative; /* Needed for Chart.js responsiveness */
+    height: 450px;
+    position: relative;
+}
+
+.chart-container.full-width {
+    grid-column: 1 / -1; /* Make this chart span the full width */
 }
 
 .chart-container h3 {
@@ -133,9 +138,9 @@ section h2 {
     border-radius: 12px;
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-    overflow: hidden; /* Important for containing children */
-    display: flex; /* Use flexbox for layout */
-    flex-direction: column; /* Stack children vertically */
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .filter-controls {
@@ -143,7 +148,7 @@ section h2 {
     gap: 20px;
     padding: 20px;
     border-bottom: 1px solid var(--border-color);
-    flex-shrink: 0; /* Prevent the filter from shrinking */
+    flex-shrink: 0;
 }
 
 .filter-controls input,
@@ -170,8 +175,8 @@ section h2 {
 }
 
 #alerts-list {
-    max-height: 70vh; /* Set a maximum height relative to viewport */
-    overflow-y: auto; /* Enable vertical scrolling */
+    max-height: 70vh;
+    overflow-y: auto;
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -335,4 +340,211 @@ footer {
 #last-updated {
     font-weight: bold;
     color: var(--primary-text);
+}
+
+/* --- Count Box Visualization --- */
+.count-box-container {
+    background-color: var(--primary-card-bg);
+    padding: 25px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    height: 450px;
+}
+
+.count-box-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+    margin-bottom: 20px;
+}
+
+.count-box-header h3 {
+    margin: 0;
+    color: var(--primary-text);
+    font-size: 1.5em;
+    font-weight: 500;
+}
+
+.count-box-header select {
+    padding: 8px 12px;
+    background-color: var(--secondary-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--primary-text);
+    font-size: 0.9em;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.count-box-header select:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+}
+
+.count-box-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
+    flex-grow: 1;
+}
+
+.count-item {
+    background-color: var(--secondary-card-bg);
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    min-width: 120px;
+    transition: transform 0.2s ease;
+}
+
+.count-item:hover {
+    transform: translateY(-5px);
+}
+
+.count-item .count-value {
+    font-size: 2.5em;
+    font-weight: 700;
+    color: var(--accent-blue);
+    display: block;
+}
+
+.count-item .count-label {
+    font-size: 1em;
+    color: var(--secondary-text);
+    text-transform: capitalize;
+}
+
+/* --- Authentication Page Styles --- */
+.auth-container {
+    max-width: 500px;
+    margin: 40px auto;
+    padding: 40px;
+    background-color: var(--primary-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.auth-container h2 {
+    text-align: center;
+    color: var(--primary-text);
+    font-size: 2em;
+    font-weight: 700;
+    margin-top: 0;
+    margin-bottom: 10px;
+}
+
+.auth-subtitle {
+    text-align: center;
+    color: var(--secondary-text);
+    margin-bottom: 30px;
+}
+
+.auth-form .form-group {
+    margin-bottom: 20px;
+}
+
+.auth-form label {
+    display: block;
+    color: var(--secondary-text);
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="password"],
+.auth-form input[type="email"] {
+    width: 100%;
+    padding: 12px 15px;
+    background-color: var(--secondary-card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--primary-text);
+    font-size: 1em;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+
+.auth-form input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+}
+
+.auth-form .form-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    font-size: 0.9em;
+}
+
+.form-options .checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-options a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    transition: text-decoration 0.2s;
+}
+
+.form-options a:hover {
+    text-decoration: underline;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 14px;
+    background-color: var(--accent-blue);
+    color: var(--dark-bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 1.1em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary:hover {
+    background-color: #7bc0ff;
+    box-shadow: 0 4px 15px rgba(88, 166, 255, 0.25);
+}
+
+.auth-footer {
+    text-align: center;
+    margin-top: 30px;
+    color: var(--secondary-text);
+}
+
+.auth-footer a {
+    color: var(--accent-blue);
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+.settings-container h3 {
+    color: var(--primary-text);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    margin-top: 30px;
+    margin-bottom: 20px;
+    font-size: 1.4em;
+}
+
+.settings-container form:first-of-type h3 {
+    margin-top: 0;
 }
