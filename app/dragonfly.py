@@ -7,11 +7,13 @@ import base64
 from threading import Thread, Lock
 from datetime import datetime
 from urllib.parse import unquote
-
+import qrcode
+import io
+import pyotp
 import requests
 import nacl.secret
 import nacl.utils
-from flask import Flask, request, jsonify, render_template, url_for, redirect, flash
+from flask import Flask, request, jsonify, render_template, url_for, redirect, flash, send_file, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -46,13 +48,14 @@ login_manager.login_message = "You must be logged in to access this page."
 login_manager.login_message_category = "info"
 
 
-# --- Database Model (Moved here from login.py) ---
+# --- Database Model (with MFA fields) ---
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    # You might want to add an email field back here if needed for registration
-    # email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
+    email = db.Column(db.String(50), nullable=True)
+    mfa_secret = db.Column(db.String(100), nullable=True)
+    mfa_enabled = db.Column(db.Boolean, default=False, nullable=False)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -177,11 +180,103 @@ def login():
         user = User.query.filter_by(username=username).first()
 
         if user and check_password_hash(user.password_hash, password):
-            login_user(user, remember=True)
-            return redirect(url_for('dashboard'))
+            
+            if user.mfa_enabled:
+                session['username_for_mfa'] = user.username
+                return redirect(url_for('login_mfa'))
+            else:
+                login_user(user, remember=True)
+                return redirect(url_for('dashboard'))
         else:
             flash('Invalid username or password.', 'error')
     return render_template('login.html')
+
+# --- MFA LOGIN ROUTE ---
+@app.route('/login/mfa', methods=['GET', 'POST'])
+def login_mfa():
+    username = session.get('username_for_mfa')
+    if not username:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        user = User.query.filter_by(username=username).first()
+        token = request.form.get('token')
+        
+        totp = pyotp.TOTP(user.mfa_secret)
+        if totp.verify(token):
+            session.pop('username_for_mfa', None) # Clean up session
+            login_user(user, remember=True)
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid MFA token.', 'error')
+    
+    return render_template('mfa_verify.html')
+
+# --- MFA SETUP ROUTES --- 
+@app.route('/mfa/setup')
+@login_required
+def mfa_setup():
+    if current_user.mfa_enabled:
+        return redirect(url_for('settings'))
+
+    # Generate a new secret if one doesn't exist
+    if not current_user.mfa_secret:
+        current_user.mfa_secret = pyotp.random_base32()
+        db.session.commit()
+
+    return render_template('mfa_setup.html', secret=current_user.mfa_secret)
+
+@app.route('/mfa/qrcode')
+@login_required
+def mfa_qrcode():
+    if not current_user.mfa_secret:
+        print("DEBUG: MFA secret not found for user.")
+        return "MFA secret not found.", 404
+    
+    try:
+        # Generate the URI for the authenticator app
+        uri = pyotp.totp.TOTP(current_user.mfa_secret).provisioning_uri(
+            name=current_user.username,
+            issuer_name="DragonflySIEM"
+        )
+        print(f"DEBUG: Generated MFA URI: {uri}")
+        
+        # Generate QR code image
+        img = qrcode.make(uri)
+        buf = io.BytesIO()
+        img.save(buf)
+        buf.seek(0)
+        
+        print("DEBUG: QR code image generated successfully. Sending file.")
+        return send_file(buf, mimetype='image/png')
+    except Exception as e:
+        print(f"ERROR: Failed to generate QR code: {e}")
+        return "Failed to generate QR code.", 500
+
+@app.route('/mfa/verify', methods=['POST'])
+@login_required
+def mfa_verify():
+    token = request.form.get('token')
+    totp = pyotp.TOTP(current_user.mfa_secret)
+    
+    if totp.verify(token):
+        current_user.mfa_enabled = True
+        db.session.commit()
+        flash('MFA has been successfully enabled!', 'success')
+        return redirect(url_for('settings'))
+    else:
+        flash('Invalid token. Please try again.', 'error')
+        return redirect(url_for('mfa_setup'))
+
+@app.route('/mfa/disable', methods=['POST'])
+@login_required
+def mfa_disable():
+    current_user.mfa_enabled = False
+    current_user.mfa_secret = None # For security, remove the old secret
+    db.session.commit()
+    flash('MFA has been disabled.', 'success')
+    return redirect(url_for('settings'))
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -192,6 +287,7 @@ def register():
         username = request.form.get('username')
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
+        email = request.form.get('email')
 
         if password != confirm_password:
             flash('Passwords do not match.', 'error')
