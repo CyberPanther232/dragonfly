@@ -36,17 +36,37 @@ if sys.platform == "win32":
     try:
         import win32evtlog
         import win32evtlogutil
+        import win32com.client
         
     except ImportError:
         print("[!] The 'pywin32' library is required on Windows. Please run: pip install pywin32")
         sys.exit(1)
         
+    # Windows Security Event Log Configuration
     LOG_TYPE = "Security"
     WINDOWS_EVENT_IDS = {
         4624: "SUCCESSFUL_LOGON",
         4625: "FAILED_LOGON",
         4740: "ACCOUNT_LOCKOUT"
     }
+    
+    # Scheduled Tasks Configuration
+    TASK_STATE = {
+        0 : 'Unknown',
+        1 : 'Disabled',
+        2 : 'Queued',
+        3 : 'Ready',
+        4 : 'Running'
+    }
+    
+    TASK_ENUM_HIDDEN = 1 # 1 = Search for Hidden Scheduled Tasks
+    TASK_ACTION_EXEC = 0 # Type code for an execution action (runs a program/script)
+    TASK_RUNLEVEL = {
+        0: 'Limited (LUA)', 
+        1: 'Highest (Administrator)'
+    }
+    
+    SCHEDULED_TASKS_REFRESH = 15 # Refresh Scheduled Tasks Lookup in Seconds
     
 else:
     LINUX_LOG_FILES = [
@@ -127,7 +147,7 @@ def send_alert_to_server(alert_data, device_info, nacl_box=BOX):
     payload = {
         "device_id": device_info["device_name"],
         "category": encrypt_and_encode(alert_data["category"].encode('utf-8')),
-        "severity": encrypt_and_encode(alert_data.get("severity", "low").encode('utf-8')),
+        "severity": encrypt_and_encode(alert_data.get("severity", "Low").encode('utf-8')),
         "agent_info": encrypt_and_encode(str(device_info).encode('utf-8')),
         "alert": encrypt_and_encode(str(alert_data).encode('utf-8'))
     }
@@ -154,7 +174,7 @@ def check_brute_force(source_identifier, device_info):
             "details": f"Login attempts: {len(failed_attempts[source_identifier])}",
             "timeframe_seconds": BRUTE_FORCE_TIMEFRAME_SECONDS,
             "category": "security",
-            "severity": "high"
+            "severity": "High"
         }
         send_alert_to_server(alert, device_info)
         failed_attempts[source_identifier].clear()
@@ -186,15 +206,15 @@ def monitor_windows_ssh(device_info):
                     print(f"[*] Processing event: {message}")
                     timestamp = event.TimeGenerated.Format()
                     category = "informational"
-                    severity = "low"
+                    severity = "Low"
             
                     if "Too many authentication failures" in message:
                         category = "security"
-                        severity = "high"
+                        severity = "High"
                         
                     elif "Failed password" in message or "Invalid user" in message:
                         category = "informational"
-                        severity = "low"
+                        severity = "Low"
                         process_failed_ssh_login(event, device_info)
                     
                     alert_details = {
@@ -224,7 +244,7 @@ def monitor_windows_logs(device_info):
                     event_type = WINDOWS_EVENT_IDS[event.EventID]
                     
                     category = "security"
-                    severity = "medium" if event_type == "FAILED_LOGON" else "low"
+                    severity = "Medium" if event_type == "FAILED_LOGON" else "Low"
                     
                     alert_details = {
                         "type": event_type,
@@ -241,6 +261,128 @@ def monitor_windows_logs(device_info):
                         ip_address = event.StringInserts[19] if len(event.StringInserts) > 19 else 'N/A'
                         check_brute_force(f"{user}@{ip_address}", device_info)
         time.sleep(POLL_INTERVAL_SECONDS)
+
+def monitor_windows_scheduled_tasks(device_info):
+    """
+    Connects to the Windows Task Scheduler service and monitors for any
+    changes to scheduled tasks, including their privileges.
+    """
+    scheduler = win32com.client.Dispatch('Schedule.Service')
+    scheduler.Connect()
+    
+    print("--- Starting Scheduled Task Monitor ---")
+    
+    baseline_tasks = {}
+    is_first_run = True
+    
+    while True:
+        try:
+            current_tasks = {}
+            folders = [scheduler.GetFolder('\\')]
+            alert = False
+            
+            while folders:
+                folder = folders.pop(0)
+                folders += list(folder.GetFolders(0))
+                tasks = list(folder.GetTasks(TASK_ENUM_HIDDEN))
+            
+                for task in tasks:
+                    action_list = []
+                    for action in task.Definition.Actions:
+                        if action.Type == TASK_ACTION_EXEC:
+                            action_list.append({
+                                'Command': action.Path,
+                                'Arguments': action.Arguments,
+                            })
+                    
+                    # --- Build a comprehensive dictionary for the task ---
+                    task_data = {
+                        'State': TASK_STATE.get(task.State, "Unknown State"),
+                        'Actions': action_list,
+                        'Description': task.Definition.RegistrationInfo.Description,
+                        'UserId': task.Definition.Principal.UserId,
+                        'RunLevel': TASK_RUNLEVEL.get(task.Definition.Principal.RunLevel, "Unknown Level")
+                    }
+                    current_tasks[task.Path] = task_data
+
+            # --- Logic for baselining and comparing ---
+            if is_first_run:
+                baseline_tasks = current_tasks
+                is_first_run = False
+                print(f"--- Baseline established with {len(baseline_tasks)} tasks. Monitoring for changes... ---\n")
+            else:
+                # Use set operations on dictionary keys to find differences
+                baseline_keys = set(baseline_tasks.keys())
+                current_keys = set(current_tasks.keys())
+                
+                new_tasks = current_keys - baseline_keys
+                deleted_tasks = baseline_keys - current_keys
+                
+                if new_tasks or deleted_tasks or baseline_tasks != current_tasks:
+                    print("!!! CHANGE DETECTED IN SCHEDULED TASKS !!!")
+                    severity = "Low"
+
+                    # Report newly created tasks and their descriptions
+                    for task_path in new_tasks:
+                        task_info = current_tasks[task_path]
+                        if current_tasks[task_path]['RunLevel'] == 'Highest (Administrator)':
+                            severity = "High"
+                        print(f"\n[+] New Task Added: {task_path}")
+                        print(f"    Description: {task_info['Description']}")
+                        print(f"    Runs As: {task_info['UserId']} ({task_info['RunLevel']})")
+                        
+                        alert = {
+                            "type": "SCHEDULED_TASK_CREATED",
+                            "source": "Scheduled_Task_Monitor",
+                            "details": f"Scheduled Task Modified: {task_path}",
+                            "category": "security",
+                            "severity": severity
+                            }
+
+                    # Report deleted tasks
+                    for task_path in deleted_tasks:
+                        print(f"\n[-] Task Deleted: {task_path}")
+                        
+                        alert = {
+                            "type": "SCHEDULED_TASK_DELETED",
+                            "source": "Scheduled_Task_Monitor",
+                            "details": f"Scheduled Task Deleted: {task_path}",
+                            "category": "security",
+                            "severity": severity
+                            }
+                    
+                    # Find and report modified tasks
+                    for task_path in baseline_keys.intersection(current_keys):
+                        if baseline_tasks[task_path] != current_tasks[task_path]:
+                            print(f"\n[*] Task Modified: {task_path}")
+                            print(task_path)
+                            # You could add logic here to show exactly what changed
+                            if current_tasks[task_path]['RunLevel'] == 'Highest (Administrator)':
+                                severity = "High"
+                            alert = {
+                            "type": "SCHEDULED_TASK_MODIFIED",
+                            "source": "Scheduled_Task_Monitor",
+                            "details": f"Scheduled Task Modified: {task_path}",
+                            "category": "security",
+                            "severity": severity
+                            }
+                            print(alert)
+                    
+                    # Update the baseline to the new state for the next check
+                    baseline_tasks = current_tasks
+                
+                else:
+                    print("--- No changes detected. ---")
+
+            print(f'--- Waiting {SCHEDULED_TASKS_REFRESH} seconds before next refresh. ---\n')
+            
+            if alert:
+                send_alert_to_server(alert, device_info)
+            
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
+        time.sleep(SCHEDULED_TASKS_REFRESH)
 
 def tail_f(filename):
     """Generator that yields new lines from a file, like 'tail -f'."""
@@ -277,10 +419,10 @@ def watch_single_log(log_file, device_info):
             for keyword, event_type in LINUX_KEYWORDS.items():
                 if keyword in line:
                     category = "informational"
-                    severity = "low"
+                    severity = "Low"
                     # Trigger brute-force check on specific failure types
                     if event_type in ['FAILED_LOGIN', 'INVALID_USER', 'AUTH_FAILURE', 'BRUTE_FORCE_SUSPECTED']:
-                        severity = "medium" if event_type == 'FAILED_LOGIN' else "high" if event_type == 'BRUTE_FORCE_SUSPECTED' else "low"
+                        severity = "Medium" if event_type == 'FAILED_LOGIN' else "High" if event_type == 'BRUTE_FORCE_SUSPECTED' else "Low"
                         category = "security"
                         parts = line.split()
                         ip_address = 'N/A'
@@ -304,11 +446,10 @@ def watch_single_log(log_file, device_info):
 def start_security_monitor(device_info):
     """Starts the appropriate OS-specific log monitoring function."""
     if sys.platform == "win32":
-        winevtlog_thread = threading.Thread(target=monitor_windows_logs, args=(device_info,), daemon=True)
-        winsshlog_thread = threading.Thread(target=monitor_windows_ssh, args=(device_info,), daemon=True)
-        winevtlog_thread.start()
-        winsshlog_thread.start()
-        
+        threading.Thread(target=monitor_windows_logs, args=(device_info,), daemon=True).start() # Windows Security Log Thread
+        threading.Thread(target=monitor_windows_ssh, args=(device_info,), daemon=True).start() # Windows SSH Log Thread
+        threading.Thread(target=monitor_windows_scheduled_tasks, args=(device_info,), daemon=True).start() # Windows Scheduled Tasks Log Thread
+
     else:
         monitor_linux_logs(device_info)
 
