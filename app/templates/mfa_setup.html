@@ -1,0 +1,38 @@
+<!-- mfa_setup.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enable MFA - Dragonfly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Enable Multi-Factor Authentication</h1>
+    </header>
+    <main class="container">
+        <div class="auth-container">
+            <h2>Step 1: Scan QR Code</h2>
+            <p class="auth-subtitle">Use your authenticator app (like Google Authenticator, Authy, or Microsoft Authenticator) to scan this QR code.</p>
+            
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="{{ url_for('mfa_qrcode') }}" alt="MFA QR Code">
+            </div>
+
+            <hr style="border-color: var(--border-color); margin: 30px 0;">
+
+            <h2>Step 2: Verify Token</h2>
+            <p class="auth-subtitle">Enter the 6-digit code from your app to complete the setup.</p>
+
+            <form action="{{ url_for('mfa_verify') }}" method="POST" class="auth-form">
+                <div class="form-group">
+                    <label for="token">Verification Code</label>
+                    <input type="text" id="token" name="token" required pattern="\d{6}" title="Enter a 6-digit code">
+                </div>
+                <button type="submit" class="btn-primary">Enable MFA</button>
+            </form>
+        </div>
+    </main>
+</body>
+</html>
